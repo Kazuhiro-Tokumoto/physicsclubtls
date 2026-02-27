@@ -1,0 +1,39 @@
+[
+    {
+       "root": [
+            {
+                "keynumber": 1,
+                "sign":"ここにrootの公開鍵の署名が入る",
+                "nameca": "ここにCAの名前が入る",
+                "CA": [
+                    {
+                        "publickey": "ここにCAの公開鍵が入る",
+                        "caname": "ここにCAの名前が入る",
+                        "signature": "ここにCAの署名が入る",
+                        "CA": [
+                            {
+                                "publickey": "ここにCAの公開鍵の署名が入る",
+                                "caname": "ここにCAの名前が入る",
+                                "signature": "ここにCAの署名が入る",
+                                "CA": [
+                                    {
+                                        "publickey": "ここにCAの公開鍵の署名が入る",
+                                        "caname": "ここにCAの名前が入る",
+                                        "signature": "ここにCAの署名が入る　ドメインのための",
+                                        "domain": [
+                                            {
+                                                "domainname": "ここにドメイン名が入る",
+                                                "pubkey": "ここに公開鍵が入る",
+                                                "signday": "ここに署名の日付が入る"
+                                            }
+                                        ]
+                                    }
+                                 ]
+                            }
+                         ]
+                    }
+                ]
+            }
+        ]
+    }
+]
