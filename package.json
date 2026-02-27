@@ -1,8 +1,8 @@
 {
-  "name": "btr-seed-node",
+  "name": "TLS modoki",
   "version": "1.0.0",
   "type": "module",
-  "description": "BTR (Buturi Coin) Seed Node",
+  "description": "TLSもどき",
   "main": "dist/server/index.js",
   "scripts": {
     "build": "tsc",
