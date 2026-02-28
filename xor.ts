@@ -1,0 +1,569 @@
+export class cipher {
+
+  // =====================================================================
+  // sha256 ばぐがおおそう
+  // =====================================================================
+  private sha256(data: Uint8Array): Uint8Array {
+    const K = new Uint32Array([
+      0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+      0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+      0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+      0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+      0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+      0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+      0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+      0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+      0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+      0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+      0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+    ]);
+
+    const rotr = (x: number, n: number) => (x >>> n) | (x << (32 - n));
+    let h0 = 0x6a09e667,
+      h1 = 0xbb67ae85,
+      h2 = 0x3c6ef372,
+      h3 = 0xa54ff53a;
+    let h4 = 0x510e527f,
+      h5 = 0x9b05688c,
+      h6 = 0x1f83d9ab,
+      h7 = 0x5be0cd19;
+
+    const len = data.length;
+    const bitLen = len * 8;
+    // ★ここを正しく修正★
+    const blockCount = Math.ceil((len + 9) / 64);
+    const blocks = new Uint8Array(blockCount * 64);
+    blocks.set(data);
+    blocks[len] = 0x80;
+    const view = new DataView(blocks.buffer);
+    // ビット長（big-endian）
+    view.setUint32(blocks.length - 8, Math.floor(bitLen / 0x100000000), false);
+    view.setUint32(blocks.length - 4, bitLen >>> 0, false);
+
+    for (let i = 0; i < blocks.length; i += 64) {
+      const W = new Uint32Array(64);
+      for (let t = 0; t < 16; t++) {
+        W[t] = view.getUint32(i + t * 4, false);
+      }
+      for (let t = 16; t < 64; t++) {
+        const s0 = rotr(W[t - 15], 7) ^ rotr(W[t - 15], 18) ^ (W[t - 15] >>> 3);
+        const s1 = rotr(W[t - 2], 17) ^ rotr(W[t - 2], 19) ^ (W[t - 2] >>> 10);
+        W[t] = (((W[t - 16] + s0) | 0) + ((W[t - 7] + s1) | 0)) >>> 0;
+      }
+      let a = h0,
+        b = h1,
+        c = h2,
+        d = h3,
+        e = h4,
+        f = h5,
+        g = h6,
+        h = h7;
+      for (let t = 0; t < 64; t++) {
+        const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        const ch = (e & f) ^ (~e & g);
+        const temp1 =
+          (((h + S1) | 0) + (ch | 0) + (K[t] | 0) + (W[t] | 0)) >>> 0;
+        const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        const maj = (a & b) ^ (a & c) ^ (b & c);
+        const temp2 = ((S0 + maj) | 0) >>> 0;
+        h = g;
+        g = f;
+        f = e;
+        e = (d + temp1) >>> 0;
+        d = c;
+        c = b;
+        b = a;
+        a = (temp1 + temp2) >>> 0;
+      }
+      h0 = (h0 + a) >>> 0;
+      h1 = (h1 + b) >>> 0;
+      h2 = (h2 + c) >>> 0;
+      h3 = (h3 + d) >>> 0;
+      h4 = (h4 + e) >>> 0;
+      h5 = (h5 + f) >>> 0;
+      h6 = (h6 + g) >>> 0;
+      h7 = (h7 + h) >>> 0;
+    }
+    const result = new Uint8Array(32);
+    const resultView = new DataView(result.buffer);
+    resultView.setUint32(0, h0, false);
+    resultView.setUint32(4, h1, false);
+    resultView.setUint32(8, h2, false);
+    resultView.setUint32(12, h3, false);
+    resultView.setUint32(16, h4, false);
+    resultView.setUint32(20, h5, false);
+    resultView.setUint32(24, h6, false);
+    resultView.setUint32(28, h7, false);
+    return result;
+  }
+
+  // ---------------------------------------------------------------------
+  // ユーティリティ
+  // ---------------------------------------------------------------------
+
+  private concat(...arrays: Uint8Array[]): Uint8Array {
+    const total = arrays.reduce((n, a) => n + a.length, 0);
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const a of arrays) {
+      out.set(a, offset);
+      offset += a.length;
+    }
+    return out;
+  }
+
+  private counterToBytes(n: number): Uint8Array {
+    const buf = new Uint8Array(4);
+    new DataView(buf.buffer).setUint32(0, n, false);
+    return buf;
+  }
+
+  // ---------------------------------------------------------------------
+  // 1000回ストレッチング
+  // ブルートフォース対策：10000回ハッシュして鍵を強化する
+  // ---------------------------------------------------------------------
+  private stretch(data: Uint8Array): Uint8Array {
+    let h = data;
+    for (let i = 0; i < 10000; i++) {
+      h = this.sha256(h);
+    }
+    return h;
+  }
+
+  // ---------------------------------------------------------------------
+  // HMAC-SHA256
+  // ---------------------------------------------------------------------
+  private hmacSha256(key: Uint8Array, data: Uint8Array): Uint8Array {
+    const BLOCK = 64;
+    const k = key.length > BLOCK ? this.sha256(key) : key;
+    const kPadded = new Uint8Array(BLOCK);
+    kPadded.set(k);
+    const ipad = kPadded.map((b) => b ^ 0x36);
+    const opad = kPadded.map((b) => b ^ 0x5c);
+    return this.sha256(this.concat(opad, this.sha256(this.concat(ipad, data))));
+  }
+
+  // ---------------------------------------------------------------------
+  // HKDF（暗号化用とMAC用で独立した鍵を導出）
+  // ---------------------------------------------------------------------
+  private hkdf(
+    inputKey: Uint8Array,
+    salt: Uint8Array,
+    info: Uint8Array,
+    length: number
+  ): Uint8Array {
+    const prk = this.hmacSha256(salt, inputKey);
+    const out = new Uint8Array(length);
+    let prev = new Uint8Array(0);
+    let pos = 0;
+    let counter = 1;
+    while (pos < length) {
+      prev = this.hmacSha256(prk, this.concat(prev, info, new Uint8Array([counter++]))) as Uint8Array<ArrayBuffer>;
+      const take = Math.min(prev.length, length - pos);
+      out.set(prev.subarray(0, take), pos);
+      pos += take;
+    }
+    return out;
+  }
+
+  // ---------------------------------------------------------------------
+  // CTR モード（SHA-256 ベース）
+  // ---------------------------------------------------------------------
+private ctrProcess(data: Uint8Array, key: Uint8Array, iv: Uint8Array): Uint8Array {
+  const BLOCK = 32;
+  const result = new Uint8Array(data.length);
+  for (let i = 0; i < data.length; i += BLOCK) {
+    const counter = Math.floor(i / BLOCK);
+    // sha256 の代わりに hmacSha256 を使う
+    const blockKey = this.hmacSha256(key, this.concat(iv, this.counterToBytes(counter)));
+    const end = Math.min(BLOCK, data.length - i);
+    for (let j = 0; j < end; j++) {
+      result[i + j] = data[i + j] ^ blockKey[j];
+    }
+  }
+  return result;
+}
+
+  // ---------------------------------------------------------------------
+  // 暗号化
+  // 出力フォーマット: [ IV (16B) | 暗号文 | HMAC (32B) ]
+  // ---------------------------------------------------------------------
+  public encrypt = (rawData: Uint8Array, key: Uint8Array): Uint8Array => {
+    // 鍵は32Bのみ受け付ける
+    if (key.length !== 32) {
+      throw new Error("鍵は32バイトにしてください");
+    }
+
+    const iv = globalThis.crypto.getRandomValues(new Uint8Array(16));
+
+    // 鍵を10000回ストレッチ
+    const stretchedKey = this.stretch(key);
+
+    // HKDF で暗号化用とMAC用を独立して導出
+    const encKey = this.hkdf(stretchedKey, iv, new TextEncoder().encode("enc"), 32);
+    const macKey = this.hkdf(stretchedKey, iv, new TextEncoder().encode("mac"), 32);
+
+    const ciphertext = this.ctrProcess(rawData, encKey, iv);
+    const mac = this.hmacSha256(macKey, this.concat(iv, ciphertext));
+
+    return this.concat(iv, ciphertext, mac);
+  };
+
+  // ---------------------------------------------------------------------
+  // 復号
+  // 改ざんを検知した場合は null を返します
+  // ---------------------------------------------------------------------
+  public decrypt = (encryptedWithIv: Uint8Array, key: Uint8Array): Uint8Array | null => {
+    // 鍵は32Bのみ受け付ける
+    if (key.length !== 32) {
+      throw new Error("鍵は32バイトにしてください");
+    }
+
+    // フォーマット: [ IV (16B) | 暗号文 | HMAC (32B) ]
+    if (encryptedWithIv.length < 16 + 32) {
+      console.error("decrypt error: データが短すぎます");
+      return null;
+    }
+
+    const iv = encryptedWithIv.slice(0, 16);
+    const mac = encryptedWithIv.slice(-32);
+    const ciphertext = encryptedWithIv.slice(16, -32);
+
+    // 鍵を10000回ストレッチ
+    const stretchedKey = this.stretch(key);
+
+    // HKDF で同じ鍵を再導出
+    const encKey = this.hkdf(stretchedKey, iv, new TextEncoder().encode("enc"), 32);
+    const macKey = this.hkdf(stretchedKey, iv, new TextEncoder().encode("mac"), 32);
+
+    // MAC 検証（タイミング攻撃対策で全バイト比較）
+    const expectedMac = this.hmacSha256(macKey, this.concat(iv, ciphertext));
+    let diff = 0;
+    for (let i = 0; i < 32; i++) {
+      diff |= mac[i] ^ expectedMac[i];
+    }
+    if (diff !== 0) {
+      console.error("decrypt error: MAC 検証失敗（改ざんの可能性）");
+      return null;
+    }
+
+    return this.ctrProcess(ciphertext, encKey, iv);
+  };
+}
+export class dsa{
+  private readonly p: bigint = 0x863a7811a995cff52cc38ccd9ff9478f00768f7e265d7f9389d697c5fb45eae78b76063fe1f406b566d3a0dedcb17211213571497e506eb586fdaea2d9625f8aa254610674178211d4eaf173c2c3c7d66a56f4f93989dc8d37953978d41618e00eb95aa2e77b7e81a0c571158f4afdfcda01fecc085ffaa55f6ca35b5694864b3f4fc7b44ea89e25256ec18dabc4e54672617095617b3ac5362d229afaa85761c1a1d70df2de9892fb32c7779a66e802256124470c7ddcb661aadf2addb476b01ef2a80d97de26e2d3bc34bbe846806e62fb677a7b76c35e47ab2843f39a3a50c5f9758ddd0791928d37f25d6582b2f41813164874cb1aa86fe25e336d78b22aab22e93ea7643e309a84d6531aad3d5759875f54dc74de5343e43a5b8f4703cfe4e9f6270864eee470599a02852f2b12c350ecd8a67ac15952f76af5a624d3e49cc318fbe4967144552b0bdb3c73cb206c8960bccd98ba94e482497183aba028a603d7e8d31c8450a8a1b19b7ad35eeb6c933ac013d99e4c007f4cd9bc401fa1n
+  private readonly q: bigint = 0xed185c98f324f4d6256bfa2c7e7bfab0dfd05ad320f7c6203918bf8755fd0a43n
+  private readonly g: bigint = 0x8609b8ba32bc806a7139465ea9cebe3f376b050660c51c96be91feee3dff3b866dcea6b9551a6ca38ede59c6ebd34ec0bf75e51cf60d1572de8e810b62e58b6d296210d88ae79ebeb4432cb395f1b014e02ab2fb3095c59e13a1bb2bcc468ad9b838e4c08dcd8da6203661c84d9f39b700c2eee9ddab3de9cdd345ca61f39e5b0ad32cf1f252538805f56c132e8ebffaa49c6515bb09194e32efa5830546892c64e78b61219033e5e345dcc7eadbd858d13a6e008cec482a5c07a31c15a8d786885534109f5b2222cc4e208562bfeea809ff4fefe5e1ab08fb046c3f02fd432b2c4ead25916f87773cb8f303ef86e2cbebb7590252de903a4fcdd818c9ef71ce0e636f64672675c925ee6dee0980fa616042bce87720c44f7e649a41087b90f673b47b7a1019c618a7bc075166bab5f402507576906026c5558bf56a31e1743b9e67ab02b59ab1e64e4fd0afdc09c46699f1ef613dd358f313094d248ea4012c96be126451bf879403648452099a903885849f2c07bebdc15be91172ee3fa6fdn;
+  private readonly montParams = (() => {
+    const mod = this.p;
+    const modBits = 3072;
+    const k = 7;
+    const wsize = k;
+    const numOdd = 1 << (wsize - 1);
+    const R =  11619211990739916125719005066609148741373950352725790473322972304574407461994220451474672089066236814502652315509961034887981059189080094243325771344374064802064223279412880997688099701978103254400489531614083624789459361080048209655953168738763044584722417558089539785486451503476153959137622619158251022666186487039107569632612763160323720400494985136896300485030608899154375208272857477161980345103147868292511660732811830001739287464106437133665090582215807445663268277199172813380651919450374894338119081610024620419278023501497520034190721468469891514832545989712026617233917059916609355274038363188177056690122571727796543526914589767093277759108623230892892660398508764680032584114181502351067776323837974591183063073397402584535370931034875831581646309689269560520205783436064990792150083798971027622253954614957938149714087421432300242631844049113518482478026305839421912936812758885829883228714215828925134659387392n;
+    const mask = R - 1n;
+
+    const nPrime = 8763283708848329069701235532546997873030427997973428950267880958664071890190864870499468527695317205369868724611165583442429808003519112909974006001553277176349326746504072169068464162065335585628556615717269606213023380878797687813459657130186327899762887288275300521753779213972840937249667935000171799487746700073885404519294788594716446792961811701983152839559677147575945996514096947772246746594923774630010490243985721389751549173652561926894733773159681310005133359264562978079894229579723212418411432106415928219864361254309053724433655699365258642708466458449906589984141642406539107917066508684038517422590455418708536613582245319803928376452151071551937336438123367580032413195870213787496440198091604113186429360579332657259060568047099449027864025256302528149769608876233249609398374153511613918511701899602994714816549974939526866100179289124380612925482537529973986998461875037525742352869239460953804502629279n
+
+    return { modBits, wsize, numOdd, R, mask, nPrime };
+  })();
+  private sha256(data: Uint8Array): Uint8Array {
+    const K = new Uint32Array([
+      0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
+      0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
+      0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174, 0xe49b69c1, 0xefbe4786,
+      0x0fc19dc6, 0x240ca1cc, 0x2de92c6f, 0x4a7484aa, 0x5cb0a9dc, 0x76f988da,
+      0x983e5152, 0xa831c66d, 0xb00327c8, 0xbf597fc7, 0xc6e00bf3, 0xd5a79147,
+      0x06ca6351, 0x14292967, 0x27b70a85, 0x2e1b2138, 0x4d2c6dfc, 0x53380d13,
+      0x650a7354, 0x766a0abb, 0x81c2c92e, 0x92722c85, 0xa2bfe8a1, 0xa81a664b,
+      0xc24b8b70, 0xc76c51a3, 0xd192e819, 0xd6990624, 0xf40e3585, 0x106aa070,
+      0x19a4c116, 0x1e376c08, 0x2748774c, 0x34b0bcb5, 0x391c0cb3, 0x4ed8aa4a,
+      0x5b9cca4f, 0x682e6ff3, 0x748f82ee, 0x78a5636f, 0x84c87814, 0x8cc70208,
+      0x90befffa, 0xa4506ceb, 0xbef9a3f7, 0xc67178f2,
+    ]);
+
+    const rotr = (x: number, n: number) => (x >>> n) | (x << (32 - n));
+    let h0 = 0x6a09e667,
+      h1 = 0xbb67ae85,
+      h2 = 0x3c6ef372,
+      h3 = 0xa54ff53a;
+    let h4 = 0x510e527f,
+      h5 = 0x9b05688c,
+      h6 = 0x1f83d9ab,
+      h7 = 0x5be0cd19;
+
+    const len = data.length;
+    const bitLen = len * 8;
+    // ★ここを正しく修正★
+    const blockCount = Math.ceil((len + 9) / 64);
+    const blocks = new Uint8Array(blockCount * 64);
+    blocks.set(data);
+    blocks[len] = 0x80;
+    const view = new DataView(blocks.buffer);
+    // ビット長（big-endian）
+    view.setUint32(blocks.length - 8, Math.floor(bitLen / 0x100000000), false);
+    view.setUint32(blocks.length - 4, bitLen >>> 0, false);
+
+    for (let i = 0; i < blocks.length; i += 64) {
+      const W = new Uint32Array(64);
+      for (let t = 0; t < 16; t++) {
+        W[t] = view.getUint32(i + t * 4, false);
+      }
+      for (let t = 16; t < 64; t++) {
+        const s0 = rotr(W[t - 15], 7) ^ rotr(W[t - 15], 18) ^ (W[t - 15] >>> 3);
+        const s1 = rotr(W[t - 2], 17) ^ rotr(W[t - 2], 19) ^ (W[t - 2] >>> 10);
+        W[t] = (((W[t - 16] + s0) | 0) + ((W[t - 7] + s1) | 0)) >>> 0;
+      }
+      let a = h0,
+        b = h1,
+        c = h2,
+        d = h3,
+        e = h4,
+        f = h5,
+        g = h6,
+        h = h7;
+      for (let t = 0; t < 64; t++) {
+        const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+        const ch = (e & f) ^ (~e & g);
+        const temp1 =
+          (((h + S1) | 0) + (ch | 0) + (K[t] | 0) + (W[t] | 0)) >>> 0;
+        const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+        const maj = (a & b) ^ (a & c) ^ (b & c);
+        const temp2 = ((S0 + maj) | 0) >>> 0;
+        h = g;
+        g = f;
+        f = e;
+        e = (d + temp1) >>> 0;
+        d = c;
+        c = b;
+        b = a;
+        a = (temp1 + temp2) >>> 0;
+      }
+      h0 = (h0 + a) >>> 0;
+      h1 = (h1 + b) >>> 0;
+      h2 = (h2 + c) >>> 0;
+      h3 = (h3 + d) >>> 0;
+      h4 = (h4 + e) >>> 0;
+      h5 = (h5 + f) >>> 0;
+      h6 = (h6 + g) >>> 0;
+      h7 = (h7 + h) >>> 0;
+    }
+    const result = new Uint8Array(32);
+    const resultView = new DataView(result.buffer);
+    resultView.setUint32(0, h0, false);
+    resultView.setUint32(4, h1, false);
+    resultView.setUint32(8, h2, false);
+    resultView.setUint32(12, h3, false);
+    resultView.setUint32(16, h4, false);
+    resultView.setUint32(20, h5, false);
+    resultView.setUint32(24, h6, false);
+    resultView.setUint32(28, h7, false);
+    return result;
+  }
+  private inv(e: bigint, mod: bigint): bigint {
+    let r0 = mod,
+      r1 = e;
+    let x0 = 0n,
+      x1 = 1n;
+
+    r1 = r1 % mod;
+    if (r1 === 0n) return 0n;
+
+    while (r1 !== 0n) {
+      const q = r0 / r1;
+      const r = r0 % r1;
+      r0 = r1;
+      r1 = r;
+      const tmp = x0 - q * x1;
+      x0 = x1;
+      x1 = tmp;
+    }
+
+    if (r0 !== 1n) return 0n;
+    return x0 < 0n ? x0 + mod : x0;
+  }
+  private modPow(base: bigint, exp: bigint, mod: bigint): bigint {
+    let result = 1n;
+    base = base % mod;
+    while (exp > 0n) {
+      if (exp & 1n) result = (result * base) % mod;
+      base = (base * base) % mod;
+      exp >>= 1n;
+    }
+    return result;
+  }
+  public BigintToBytes(n: bigint): Uint8Array {
+    const hex = n.toString(16).toUpperCase().padStart(64, "0");
+    const bytes = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) {
+      bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    }
+    return bytes;
+  }
+  public bytesToBigInt(bytes: Uint8Array): bigint {
+    const len = bytes.length;
+    let res = 0n;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, len);
+
+    let i = 0;
+    for (; i <= len - 8; i += 8) {
+      res = (res << 64n) + view.getBigUint64(i);
+    }
+    for (; i < len; i++) {
+      res = (res << 8n) + BigInt(bytes[i]);
+    }
+    return res;
+  }
+  public getkeypair(): { privatekey: Uint8Array, publickey: Uint8Array } {
+    const x = globalThis.crypto.getRandomValues(new Uint8Array(32));
+    const xBigInt = this.bytesToBigInt(x);
+    const yBigInt = this.modPow(this.g, xBigInt, this.p);
+    
+    // 384バイト（3072bit）で変換
+    const hex = yBigInt.toString(16).padStart(768, "0");
+    const y = new Uint8Array(384);
+    for (let i = 0; i < 384; i++) {
+      y[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    }
+
+    return { privatekey: x, publickey: y };
+  }
+  public sign(message: Uint8Array, privateKey: Uint8Array): Uint8Array {
+    const x = this.bytesToBigInt(privateKey);
+    
+    const k = this.generateK(message, privateKey)
+    
+    const r = this.modPow(this.g, k, this.p) % this.q;
+    const kInv = this.inv(k, this.q);
+    const hash = this.bytesToBigInt(this.sha256(message));
+    
+    // % this.q を追加
+    const s = (kInv * ((hash + r * x) % this.q)) % this.q;
+    
+      const sig = new Uint8Array(64);
+    sig.set(this.BigintToBytes(r), 0);
+    sig.set(this.BigintToBytes(s), 32);
+    return sig;
+  }
+  public verify(message: Uint8Array, signature: Uint8Array, publicKey: Uint8Array): boolean {
+    const y = this.bytesToBigInt(publicKey);
+    const r = this.bytesToBigInt(signature.slice(0, 32));
+    const s = this.bytesToBigInt(signature.slice(32, 64));
+    if (r <= 0n || r >= this.q || s <= 0n || s >= this.q) return false;
+    const w = this.inv(s, this.q);
+    const hash = this.bytesToBigInt(this.sha256(message));
+    const u1 = (hash * w) % this.q;
+    const u2 = (r * w) % this.q;
+    const v = ((this.modPow(this.g, u1, this.p) * this.modPow(y, u2, this.p)) % this.p) % this.q;
+
+    return v === r;
+    
+  }
+  public bigintToHex(n: bigint): string {
+    return n.toString(16).toUpperCase().padStart(64, "0");
+  }
+  public hexToBigInt(hex: string): bigint {
+    return BigInt("0x" + hex);
+  }
+  private generateK(message: Uint8Array, privateKey: Uint8Array): bigint {
+  const qLen = 32; // qは256bit = 32バイト
+
+  // ステップa: h1 = hash(message)
+  const h1 = this.sha256(message);
+
+  // ステップb: V = 0x01 * 32
+  let V = new Uint8Array(qLen).fill(0x01);
+
+  // ステップc: K = 0x00 * 32
+  let K = new Uint8Array(qLen).fill(0x00);
+
+  // ステップd: K = HMAC-SHA256(K, V || 0x00 || privateKey || h1)
+  K = this.hmacSha256(K, new Uint8Array([...V, 0x00, ...privateKey, ...h1])) as Uint8Array<ArrayBuffer>;
+
+  // ステップe: V = HMAC-SHA256(K, V)
+  V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
+
+  // ステップf: K = HMAC-SHA256(K, V || 0x01 || privateKey || h1)
+  K = this.hmacSha256(K, new Uint8Array([...V, 0x01, ...privateKey, ...h1])) as Uint8Array<ArrayBuffer>;
+
+  // ステップg: V = HMAC-SHA256(K, V)
+  V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
+
+  // ステップh: 候補を生成してqの範囲に収まるまで繰り返す
+    while (true) {
+      // T を空にする
+      let T = new Uint8Array(0);
+
+      // T が qLen 以上になるまで V を追加
+      while (T.length < qLen) {
+        V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
+        T = new Uint8Array([...T, ...V]);
+      }
+
+      // k候補を取り出す
+      const k = this.bytesToBigInt(T.slice(0, qLen));
+
+      // 1 <= k <= q-1 なら採用
+      if (k >= 1n && k < this.q) {
+        return k;
+      }
+
+      // 範囲外なら K, V を更新して再試行
+      K = this.hmacSha256(K, new Uint8Array([...V, 0x00])) as Uint8Array<ArrayBuffer>;
+      V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
+    }
+  }
+  private hmacSha256(key: Uint8Array, data: Uint8Array): Uint8Array {
+    const BLOCK = 64;
+    const k = key.length > BLOCK ? this.sha256(key) : key;
+    const kPadded = new Uint8Array(BLOCK);
+    kPadded.set(k);
+    const ipad = kPadded.map((b) => b ^ 0x36);
+    const opad = kPadded.map((b) => b ^ 0x5c);
+    return this.sha256(this.concat(opad, this.sha256(this.concat(ipad, data))));
+  }
+  private concat(...arrays: Uint8Array[]): Uint8Array {
+    const total = arrays.reduce((n, a) => n + a.length, 0);
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const a of arrays) {
+      out.set(a, offset);
+      offset += a.length;
+    }
+    return out;
+  }
+}
+/*
+// 使用例
+const ciphers = new cipher();
+const encoder = new TextEncoder();
+const message = encoder.encode("Hello, World!");
+const key = new Uint8Array(32); // 256-bit key
+globalThis.crypto.getRandomValues(key);
+const encrypted = ciphers.encrypt(message, key);
+console.log("Encrypted:", encrypted);
+const decrypted = ciphers.decrypt(encrypted, key);
+if (decrypted) {
+  const decoder = new TextDecoder();
+  console.log("Decrypted:", decoder.decode(decrypted));
+}
+  */
+ 
+ const message = new TextEncoder().encode("This is a test message for DSA signing.");
+const dsaInstance = new dsa();
+
+console.time ("DSA Key Generation");
+const { privatekey, publickey } = dsaInstance.getkeypair();
+console.timeEnd("DSA Key Generation");
+console.time("DSA Sign");
+const signature = dsaInstance.sign(message, privatekey);
+console.timeEnd("DSA Sign");
+console.time("DSA Verify");
+const isValid = dsaInstance.verify(message, signature, publickey);
+console.timeEnd("DSA Verify");
+console.log("Signature valid?", isValid);
+console.log("Public Key (hex):", dsaInstance.bigintToHex(dsaInstance.bytesToBigInt(publickey)));
+console.log("Signature r (hex):", dsaInstance.bigintToHex(dsaInstance.bytesToBigInt(signature.slice(0, 32))));
+console.log("Signature s (hex):", dsaInstance.bigintToHex(dsaInstance.bytesToBigInt(signature.slice(32, 64))));
+console.log("privatekey (hex):", dsaInstance.bigintToHex(dsaInstance.bytesToBigInt(privatekey)));
+console.time ("DSA Key Generation");
