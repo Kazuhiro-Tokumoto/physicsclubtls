@@ -566,4 +566,8 @@ console.log("Public Key (hex):", dsaInstance.bigintToHex(dsaInstance.bytesToBigI
 console.log("Signature r (hex):", dsaInstance.bigintToHex(dsaInstance.bytesToBigInt(signature.slice(0, 32))));
 console.log("Signature s (hex):", dsaInstance.bigintToHex(dsaInstance.bytesToBigInt(signature.slice(32, 64))));
 console.log("privatekey (hex):", dsaInstance.bigintToHex(dsaInstance.bytesToBigInt(privatekey)));
-console.time ("DSA Key Generation");
+console.log("sign(b64):", btoa(String.fromCharCode(...signature)));
+console.log("publickey(b64):", btoa(String.fromCharCode(...publickey)));
+console.log("message(b64):", btoa(String.fromCharCode(...message)));
+console.log("message(utf8):", new TextDecoder().decode(message));
+console.log("privatekey(b64):", btoa(String.fromCharCode(...privatekey)));
