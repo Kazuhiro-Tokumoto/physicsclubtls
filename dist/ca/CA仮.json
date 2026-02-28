@@ -1,0 +1,24 @@
+{
+  "root": [
+    {
+      "keynumber": 0,
+      "sign": "CB4FB7C5DD2067E0E6C94029B72DF8ECC53C3F542C3C5CF3FF8B6273BA7B906F2CF83DDE96325BC926E78F16F9A194BC4EEA445BA2483254186F0FB9E9561DB8",
+      "nameca": "CA仮",
+      "CA": [
+        {
+          "publickey": "030FB3C4DA03E4E495C56368E3C55F7846A295E1C6DA14954F8379C82586135B08",
+          "caname": "",
+          "signature": "4C068212AD1D563ED4E6C1B9A06AE1351F47E480047BDF8502A51D277F3F94ADB5774F8D3623F1545871ABF34CAC868648CA50194216021F00FA634FEEA23BAC",
+          "end": true,
+          "domain": [
+            {
+              "domainname": "example.com",
+              "pubkey": "030FB3C4DA03E4E495C56368E3C55F7846A295E1C6DA14954F8379C82586135B08",
+              "signday": "2026-02-28"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

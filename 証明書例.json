@@ -2,7 +2,7 @@
     {
        "root": [
             {
-                "keynumber": 1,
+                "keynumber": 0,
                 "sign":"ここにrootの公開鍵の署名が入る",
                 "nameca": "ここにCAの名前が入る",
                 "CA": [
