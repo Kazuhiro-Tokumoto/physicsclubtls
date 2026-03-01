@@ -621,9 +621,13 @@ const encoder = new TextEncoder();
 const message = encoder.encode("Hello, World!");
 const key = new Uint8Array(32); // 256-bit key
 globalThis.crypto.getRandomValues(key);
+console.time("encryption");
 const encrypted = ciphers.encrypt(message, key);
+console.timeEnd("encryption");
 console.log("Encrypted:", dsaInstance.bytesToHex(encrypted));
+console.time("decryption");
 const decrypted = ciphers.decrypt(encrypted, key);
+console.timeEnd("decryption");
 if (decrypted) {
     const decoder = new TextDecoder();
     console.log("Decrypted:", decoder.decode(decrypted));
