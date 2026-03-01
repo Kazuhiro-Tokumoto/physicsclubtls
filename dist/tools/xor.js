@@ -139,7 +139,7 @@ export class cipher {
     // ---------------------------------------------------------------------
     stretch(data, salt) {
         let h = this.concat(data, salt);
-        for (let i = 0; i < 10000; i++) {
+        for (let i = 0; i < 1; i++) {
             h = this.hmacSha256(data, this.concat(h, salt));
         }
         return h;

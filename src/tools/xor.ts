@@ -161,7 +161,7 @@ export class cipher {
   // ---------------------------------------------------------------------
     private stretch(data: Uint8Array, salt: Uint8Array): Uint8Array {
         let h = this.concat(data, salt);
-        for (let i = 0; i < 10000; i++) {
+        for (let i = 0; i < 1; i++) {
             h = this.hmacSha256(data, this.concat(h, salt));
         }
         return h;
