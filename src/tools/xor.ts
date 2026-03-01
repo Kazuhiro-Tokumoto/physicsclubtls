@@ -644,9 +644,9 @@ console.log("Alice private Key:", alice.privatekey);
 console.log("Bob private Key:", bob.privatekey);
 const aliceShared = dsaInstance.dh(alice.privatekey, bob.publickey);
 const bobShared = dsaInstance.dh(bob.privatekey, alice.publickey);
-console.log("Alice's Shared Secret:", aliceShared);
-console.log("Bob's Shared Secret:", bobShared);
-console.log("Shared secrets match?", aliceShared === bobShared);
+console.log("Alice's Shared Secret:", dsaInstance.bytesToBigInt(aliceShared));
+console.log("Bob's Shared Secret:", dsaInstance.bytesToBigInt(bobShared));
+console.log("Shared secrets match?", dsaInstance.bytesToHex(aliceShared) === dsaInstance.bytesToHex(bobShared));
 
 // =====================================================================
 // DOM操作
