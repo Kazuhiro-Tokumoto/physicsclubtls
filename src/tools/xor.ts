@@ -589,13 +589,13 @@ export class dsa{
     const yBigInt = this.modPow(this.g, xBigInt, this.p);
     return this.bigintToHex(yBigInt);
   }
-  public dh (privateKeyHex: string, publicKeyHex: string): string {
+  public dh (privateKeyHex: string, publicKeyHex: string): Uint8Array {
     const privateKeyBytes = this.hexToBytes(privateKeyHex);
     const publicKeyBytes = this.hexToBytes(publicKeyHex);
     const xBigInt = this.bytesToBigInt(privateKeyBytes);
     const yBigInt = this.bytesToBigInt(publicKeyBytes);
     const sharedSecret = this.modPow(yBigInt, xBigInt, this.p);
-    return this.bytesToHex(this.sha256(this.BigintToBytes(sharedSecret)));
+    return this.sha256(this.BigintToBytes(sharedSecret))
   }
 }
 
@@ -879,7 +879,7 @@ console.log("Shared secrets match?", aliceShared === bobShared);
     const out = addOutput(p, "shared secret (hex)");
     addBtn(p, "共有秘密を導出する", () => {
       try {
-        out.textContent = dsaInst.dh(privIn.value.trim(), pubIn.value.trim());
+        out.textContent = dsaInst.bytesToHex(dsaInst.dh(privIn.value.trim(), pubIn.value.trim()));
       } catch(e: any) { out.textContent = "エラー: " + e.message; }
     });
   });

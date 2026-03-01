@@ -513,7 +513,7 @@ export class dsa {
         const xBigInt = this.bytesToBigInt(privateKeyBytes);
         const yBigInt = this.bytesToBigInt(publicKeyBytes);
         const sharedSecret = this.modPow(yBigInt, xBigInt, this.p);
-        return this.bytesToHex(this.sha256(this.BigintToBytes(sharedSecret)));
+        return this.sha256(this.BigintToBytes(sharedSecret));
     }
 }
 // 使用例
@@ -807,7 +807,7 @@ console.log("Shared secrets match?", aliceShared === bobShared);
         const out = addOutput(p, "shared secret (hex)");
         addBtn(p, "共有秘密を導出する", () => {
             try {
-                out.textContent = dsaInst.dh(privIn.value.trim(), pubIn.value.trim());
+                out.textContent = dsaInst.bytesToHex(dsaInst.dh(privIn.value.trim(), pubIn.value.trim()));
             }
             catch (e) {
                 out.textContent = "エラー: " + e.message;
