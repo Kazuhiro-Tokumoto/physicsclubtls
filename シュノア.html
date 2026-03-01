@@ -50,13 +50,13 @@
 <body>
 <header>
   <h1>schnorr_tool</h1>
-  <p>なんかこっちのほうがDSAよりはやいよ</p>
+  <p>Oakley Group 14 (2048-bit) Schnorr Signature</p>
 </header>
 <div class="tabs" id="tab-bar">
   <button class="tab active" data-tab="keygen">keygen</button>
   <button class="tab" data-tab="sign">sign</button>
   <button class="tab" data-tab="verify">verify</button>
-
+  <button class="tab" data-tab="privtopub">priv→pub</button>
 </div>
 <div class="panels">
 
@@ -94,6 +94,16 @@
     <div class="field"><button class="action" id="btn-verify">検証する</button></div>
     <div id="verify-timing" class="timing"></div>
     <div id="verify-result"></div>
+  </div>
+  <!-- privtopub -->
+  <div id="panel-privtopub" class="panel">
+    <div class="field"><label>private key (hex)</label><input type="text" id="privtopub-input" placeholder="秘密鍵の16進数"></div>
+    <div class="field"><button class="action" id="btn-privtopub">公開鍵を導出する</button></div>
+    <div id="privtopub-timing" class="timing"></div>
+    <div class="field">
+      <label>public key (hex)</label>
+      <div class="output-wrap"><div class="output" id="out-privtopub">—</div><button class="copy-btn" data-target="out-privtopub">copy</button></div>
+    </div>
   </div>
 
 
@@ -315,6 +325,7 @@ function u8toHex(u8) {
 
 function hexToU8(hex) {
   hex = hex.replace(/\s/g, '');
+  if (!/^[0-9a-fA-F]+$/.test(hex)) throw new Error('無効な16進数');
   if (hex.length % 2) hex = '0' + hex;
   const u8 = new Uint8Array(hex.length / 2);
   for (let i = 0; i < u8.length; i++) u8[i] = parseInt(hex.slice(i*2, i*2+2), 16);
@@ -437,6 +448,32 @@ $('#btn-verify').addEventListener('click', () => {
       $('#verify-result').innerHTML = `<span class="result-badge invalid">エラー: ${e.message}</span>`;
     }
     btn.disabled = false; btn.textContent = '検証する';
+  });
+});
+
+// ============================================================
+// priv → pub
+// ============================================================
+$('#btn-privtopub').addEventListener('click', () => {
+  const hex = $('#privtopub-input').value.trim();
+  if (!hex) return;
+
+  const btn = $('#btn-privtopub');
+  btn.disabled = true; btn.textContent = '導出中…';
+
+  requestAnimationFrame(() => {
+    try {
+      const privKey = hexToU8(hex);
+      const t0 = performance.now();
+      const pubKey = mSign.getPublicKey(privKey);
+      const ms = (performance.now() - t0).toFixed(1);
+
+      setOutput('out-privtopub', u8toHex(pubKey));
+      $('#privtopub-timing').textContent = `${ms}ms`;
+    } catch (e) {
+      setOutput('out-privtopub', 'エラー: ' + e.message);
+    }
+    btn.disabled = false; btn.textContent = '公開鍵を導出する';
   });
 });
 
