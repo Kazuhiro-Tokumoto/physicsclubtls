@@ -556,6 +556,47 @@ export class dsa{
     }
     return out;
   }
+  public bytesToHex(bytes: Uint8Array): string {
+    return Array.from(bytes).map(b => b.toString(16).padStart(2, '0')).join('').toUpperCase();
+  }
+  public hexToBytes(hex: string): Uint8Array {
+    const bytes = new Uint8Array(hex.length / 2);
+    for (let i = 0; i < bytes.length; i++) {
+      bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    }
+    return bytes;
+  }
+  public getKeypairhex(): {privatekey: string, publickey: string} {
+    const { privatekey, publickey } = this.getkeypair();
+    return {
+      privatekey: this.bigintToHex(this.bytesToBigInt(privatekey)),
+      publickey: this.bigintToHex(this.bytesToBigInt(publickey))
+    }
+  }
+  public signhex(message: Uint8Array, privateKey: string): string {
+    const privateKeyBytes = this.hexToBytes(privateKey);
+    const signature = this.sign(message, privateKeyBytes);
+    return this.bytesToHex(signature);
+  }
+  public verifyhex(message: Uint8Array, signatureHex: string, publicKeyHex: string): boolean {
+    const signatureBytes = this.hexToBytes(signatureHex);
+    const publicKeyBytes = this.hexToBytes(publicKeyHex);
+    return this.verify(message, signatureBytes, publicKeyBytes);
+  }
+  public privatekeytopublickey(privateKeyHex: string): string {
+    const privateKeyBytes = this.hexToBytes(privateKeyHex);
+    const xBigInt = this.bytesToBigInt(privateKeyBytes);
+    const yBigInt = this.modPow(this.g, xBigInt, this.p);
+    return this.bigintToHex(yBigInt);
+  }
+  public dh (privateKeyHex: string, publicKeyHex: string): string {
+    const privateKeyBytes = this.hexToBytes(privateKeyHex);
+    const publicKeyBytes = this.hexToBytes(publicKeyHex);
+    const xBigInt = this.bytesToBigInt(privateKeyBytes);
+    const yBigInt = this.bytesToBigInt(publicKeyBytes);
+    const sharedSecret = this.modPow(yBigInt, xBigInt, this.p);
+    return this.bytesToHex(this.sha256(this.BigintToBytes(sharedSecret)));
+  }
 }
 
 // 使用例
@@ -593,3 +634,243 @@ console.log("publickey(b64):", btoa(String.fromCharCode(...publickey)));
 console.log("message(b64):", btoa(String.fromCharCode(...message)));
 console.log("message(utf8):", new TextDecoder().decode(message));
 console.log("privatekey(b64):", btoa(String.fromCharCode(...privatekey)));
+// =====================================================================
+// DOM操作
+// =====================================================================
+(() => {
+  const enc = new TextEncoder();
+  const dec = new TextDecoder();
+  const cipherInst = new cipher();
+  const dsaInst = new dsa();
+
+  const style = document.createElement("style");
+  style.textContent = `
+    *, *::before, *::after { box-sizing: border-box; touch-action: manipulation; }
+    :root {
+      --bg: #f7f6f3; --surface: #ffffff; --border: #e2e0db;
+      --text: #1a1917; --muted: #8a8780;
+      --success: #2d6a4f; --error: #c1121f;
+      --mono: 'JetBrains Mono', monospace; --sans: 'DM Sans', sans-serif;
+    }
+    body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--sans); font-size:14px; line-height:1.6; min-height:100vh; }
+    #ct-header { padding:32px 40px 24px; border-bottom:1px solid var(--border); background:var(--surface); }
+    #ct-header h1 { margin:0; font-family:var(--mono); font-size:18px; font-weight:400; letter-spacing:0.05em; }
+    #ct-header p { margin:4px 0 0; font-size:12px; color:var(--muted); font-family:var(--mono); }
+    #ct-tabs { display:flex; padding:0 40px; background:var(--surface); border-bottom:1px solid var(--border); }
+    .ct-tab { padding:12px 20px; font-family:var(--mono); font-size:12px; color:var(--muted); cursor:pointer; border:none; background:none; border-bottom:2px solid transparent; margin-bottom:-1px; transition:color 0.15s,border-color 0.15s; letter-spacing:0.05em; }
+    .ct-tab:hover { color:var(--text); }
+    .ct-tab.active { color:var(--text); border-bottom-color:var(--text); }
+    #ct-panels { max-width:720px; margin:0 auto; padding:32px 40px; }
+    .ct-panel { display:none; }
+    .ct-panel.active { display:block; }
+    .ct-field { margin-bottom:20px; }
+    .ct-label { display:block; font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:0.08em; color:var(--muted); text-transform:uppercase; margin-bottom:6px; }
+    .ct-input, .ct-textarea { width:100%; padding:10px 12px; font-family:var(--mono); font-size:12px; line-height:1.6; color:var(--text); background:var(--surface); border:1px solid var(--border); border-radius:4px; outline:none; resize:vertical; transition:border-color 0.15s; }
+    .ct-input:focus, .ct-textarea:focus { border-color:var(--text); }
+    .ct-textarea { min-height:72px; }
+    .ct-output { width:100%; padding:10px 12px; font-family:var(--mono); font-size:11px; line-height:1.7; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:4px; word-break:break-all; min-height:40px; white-space:pre-wrap; }
+    .ct-output-wrap { position:relative; }
+    .ct-copy { position:absolute; top:6px; right:6px; padding:3px 8px; font-family:var(--mono); font-size:10px; color:var(--muted); background:var(--surface); border:1px solid var(--border); border-radius:3px; cursor:pointer; }
+    .ct-copy:hover { color:var(--text); border-color:var(--text); }
+    .ct-btn { padding:10px 20px; font-family:var(--mono); font-size:12px; font-weight:500; color:var(--bg); background:var(--text); border:none; border-radius:4px; cursor:pointer; transition:opacity 0.15s; }
+    .ct-btn:hover { opacity:0.8; }
+    .ct-badge { display:inline-block; padding:4px 10px; font-family:var(--mono); font-size:11px; font-weight:500; border-radius:3px; margin-top:8px; }
+    .ct-badge.valid { background:#d8f3dc; color:var(--success); }
+    .ct-badge.invalid { background:#ffe0e0; color:var(--error); }
+    @media (max-width:600px) { #ct-header, #ct-tabs { padding-left:20px; padding-right:20px; } #ct-panels { padding:24px 20px; } }
+  `;
+  document.head.appendChild(style);
+
+  const link = document.createElement("link");
+  link.rel = "stylesheet";
+  link.href = "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap";
+  document.head.appendChild(link);
+
+  // ── ヘルパー ──
+  const el = (tag: string, cls = "", text = "") => {
+    const e = document.createElement(tag);
+    if (cls) e.className = cls;
+    if (text) e.textContent = text;
+    return e;
+  };
+  const addField = (parent: HTMLElement, labelText: string, child: HTMLElement) => {
+    const f = el("div", "ct-field");
+    f.appendChild(el("label", "ct-label", labelText));
+    f.appendChild(child);
+    parent.appendChild(f);
+    return child;
+  };
+  const addOutput = (parent: HTMLElement, labelText: string) => {
+    const f = el("div", "ct-field");
+    f.appendChild(el("label", "ct-label", labelText));
+    const wrap = el("div", "ct-output-wrap");
+    const out = el("div", "ct-output"); out.textContent = "—";
+    const copy = el("button", "ct-copy", "copy");
+    copy.addEventListener("click", () => {
+      if (out.textContent === "—") return;
+      navigator.clipboard.writeText(out.textContent ?? "").then(() => {
+        copy.textContent = "copied";
+        setTimeout(() => copy.textContent = "copy", 1200);
+      });
+    });
+    wrap.appendChild(out); wrap.appendChild(copy);
+    f.appendChild(wrap); parent.appendChild(f);
+    return out;
+  };
+  const addBtn = (parent: HTMLElement, text: string, onClick: () => void) => {
+    const f = el("div", "ct-field");
+    const b = el("button", "ct-btn", text);
+    b.addEventListener("click", onClick);
+    f.appendChild(b); parent.appendChild(f);
+    return b;
+  };
+  const mkTextarea = (placeholder = "") => {
+    const t = el("textarea", "ct-textarea") as HTMLTextAreaElement;
+    t.placeholder = placeholder; return t;
+  };
+  const mkInput = (placeholder = "") => {
+    const i = el("input", "ct-input") as HTMLInputElement;
+    i.type = "text"; i.placeholder = placeholder; return i;
+  };
+
+  // ── ヘッダー ──
+  const header = el("div"); header.id = "ct-header";
+  header.innerHTML = `<h1>DSAとAESもどき</h1><p>eccがすでにあるのに...</p>`;
+  document.body.appendChild(header);
+
+  // ── タブバー ──
+  const tabBar = el("div"); tabBar.id = "ct-tabs";
+  document.body.appendChild(tabBar);
+
+  // ── パネル ──
+  const panelContainer = el("div"); panelContainer.id = "ct-panels";
+  document.body.appendChild(panelContainer);
+
+  const tabs: HTMLElement[] = [];
+  const panelEls: HTMLElement[] = [];
+
+  const addTab = (name: string, build: (p: HTMLElement) => void) => {
+    const tab = el("button", "ct-tab", name);
+    tabBar.appendChild(tab); tabs.push(tab);
+    const panel = el("div", "ct-panel");
+    panelContainer.appendChild(panel); panelEls.push(panel);
+    build(panel);
+    tab.addEventListener("click", () => {
+      tabs.forEach(t => t.classList.remove("active"));
+      panelEls.forEach(p => p.classList.remove("active"));
+      tab.classList.add("active");
+      panel.classList.add("active");
+    });
+  };
+
+  // ── keygen ──
+  addTab("keygen", p => {
+    addBtn(p, "鍵を生成する", () => {
+      const kp = dsaInst.getkeypair();
+      privOut.textContent = dsaInst.bigintToHex(dsaInst.bytesToBigInt(kp.privatekey));
+      pubOut.textContent = dsaInst.bigintToHex(dsaInst.bytesToBigInt(kp.publickey));
+    });
+    const privOut = addOutput(p, "private key (hex)");
+    const pubOut = addOutput(p, "public key (hex)");
+  });
+
+  // ── priv→pub ──
+  addTab("priv→pub", p => {
+    const privIn = mkInput("秘密鍵のhex (64文字)");
+    addField(p, "private key (hex)", privIn);
+    const out = addOutput(p, "public key (hex)");
+    addBtn(p, "公開鍵を導出する", () => {
+      try {
+        out.textContent = dsaInst.privatekeytopublickey(privIn.value.trim());
+      } catch(e: any) { out.textContent = "エラー: " + e.message; }
+    });
+  });
+
+  // ── encrypt ──
+  addTab("encrypt", p => {
+    const ta = mkTextarea("暗号化するテキスト");
+    addField(p, "plaintext", ta);
+    const keyIn = mkInput("暗号鍵 (64文字のhex = 32バイト)");
+    addField(p, "cipher key (hex)", keyIn);
+    const out = addOutput(p, "ciphertext (base64)");
+    addBtn(p, "暗号化する", () => {
+      try {
+        const key = dsaInst.hexToBytes(keyIn.value.trim());
+        const ct = cipherInst.encrypt(enc.encode(ta.value), key);
+        out.textContent = btoa(String.fromCharCode(...ct));
+      } catch(e: any) { out.textContent = "エラー: " + e.message; }
+    });
+  });
+
+  // ── decrypt ──
+  addTab("decrypt", p => {
+    const ta = mkTextarea("Base64の暗号文");
+    addField(p, "ciphertext (base64)", ta);
+    const keyIn = mkInput("暗号鍵 (64文字のhex = 32バイト)");
+    addField(p, "cipher key (hex)", keyIn);
+    const out = addOutput(p, "plaintext");
+    addBtn(p, "復号する", () => {
+      try {
+        const key = dsaInst.hexToBytes(keyIn.value.trim());
+        const ct = Uint8Array.from(atob(ta.value.trim()), c => c.charCodeAt(0));
+        const pt = cipherInst.decrypt(ct, key);
+        out.textContent = pt ? dec.decode(pt) : "復号失敗（改ざん検知）";
+      } catch(e: any) { out.textContent = "エラー: " + e.message; }
+    });
+  });
+
+  // ── sign ──
+  addTab("sign", p => {
+    const ta = mkTextarea("署名するメッセージ");
+    addField(p, "message", ta);
+    const privIn = mkInput("秘密鍵のhex (64文字)");
+    addField(p, "private key (hex)", privIn);
+    const out = addOutput(p, "signature (hex)");
+    addBtn(p, "署名する", () => {
+      try {
+        const sig = dsaInst.signhex(enc.encode(ta.value), privIn.value);
+        out.textContent = sig;
+      } catch(e: any) { out.textContent = "エラー: " + e.message; }
+    });
+  });
+
+  // ── verify ──
+  addTab("verify", p => {
+    const ta = mkTextarea("検証するメッセージ");
+    addField(p, "message", ta);
+    const sigIn = mkInput("署名のhex");
+    addField(p, "signature (hex)", sigIn);
+    const pubIn = mkInput("公開鍵のhex");
+    addField(p, "public key (hex)", pubIn);
+    const f = el("div", "ct-field");
+    const badge = el("div");
+    const b = el("button", "ct-btn", "検証する");
+    b.addEventListener("click", () => {
+      try {
+        const valid = dsaInst.verifyhex(enc.encode(ta.value), sigIn.value, pubIn.value);
+        badge.innerHTML = `<span class="ct-badge ${valid ? "valid" : "invalid"}">${valid ? "✓ 署名有効" : "✗ 署名無効"}</span>`;
+      } catch(e: any) {
+        badge.innerHTML = `<span class="ct-badge invalid">エラー: ${(e as any).message}</span>`;
+      }
+    });
+    f.appendChild(b); f.appendChild(badge);
+    p.appendChild(f);
+  });
+  // ── dh ──
+  addTab("dh", p => {
+    const privIn = mkInput("自分の秘密鍵 (hex)");
+    addField(p, "private key (hex)", privIn);
+    const pubIn = mkInput("相手の公開鍵 (hex)");
+    addField(p, "peer public key (hex)", pubIn);
+    const out = addOutput(p, "shared secret (hex)");
+    addBtn(p, "共有秘密を導出する", () => {
+      try {
+        out.textContent = dsaInst.dh(privIn.value.trim(), pubIn.value.trim());
+      } catch(e: any) { out.textContent = "エラー: " + e.message; }
+    });
+  });
+
+  // 最初のタブをアクティブに
+  tabs[0]?.classList.add("active");
+  panelEls[0]?.classList.add("active");
+})();
