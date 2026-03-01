@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DSA Parameter Generator</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0a0a0f; --surface: #0d1117; --surface2: #161b22; --border: #30363d;
+  --text: #e8e8f0; --muted: #8b949e;
+  --blue: #58a6ff; --green: #3fb950; --purple: #d2a8ff; --orange: #ffa657; --red: #ff7b72;
+  --mono: 'JetBrains Mono', monospace; --sans: 'DM Sans', sans-serif;
+}
+body { background: var(--bg); color: var(--text); font-family: var(--mono); min-height: 100vh; line-height: 1.6; }
+.header {
+  background: linear-gradient(135deg, var(--surface) 0%, var(--surface2) 100%);
+  border-bottom: 1px solid var(--border); padding: 24px 32px;
+  display: flex; align-items: center; gap: 16px;
+}
+.header-icon { width:42px;height:42px;background:linear-gradient(135deg,var(--blue),var(--purple));border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px; }
+.header h1 { font-size:20px;font-weight:500;letter-spacing:3px;color:var(--blue); }
+.header p { font-size:11px;color:var(--muted);letter-spacing:1.5px;margin-top:2px; }
+.main { max-width:880px; margin:0 auto; padding:32px 24px; }
+.section { margin-bottom:24px; border:1px solid var(--border); border-radius:10px; overflow:hidden; background:var(--bg); }
+.section-header { padding:14px 20px; background:var(--surface2); border-bottom:1px solid var(--border); font-size:12px; font-weight:600; letter-spacing:2px; color:var(--blue); display:flex; align-items:center; gap:8px; }
+.section-body { padding:20px; }
+.controls { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:16px; }
+.label { font-size:12px; color:var(--muted); letter-spacing:0.5px; }
+.bit-btn { padding:7px 18px; background:var(--surface); border:1px solid var(--border); border-radius:6px; color:var(--muted); cursor:pointer; font-size:13px; font-family:var(--mono); transition:all 0.15s; }
+.bit-btn:hover { border-color:var(--blue); color:var(--text); }
+.bit-btn.active { background:#1f6feb; border-color:var(--blue); color:#fff; }
+.custom-input { width:90px; padding:7px 12px; background:var(--surface); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:13px; font-family:var(--mono); outline:none; text-align:center; }
+.custom-input:focus { border-color:var(--blue); }
+.action-btn { padding:12px 28px; border:none; border-radius:8px; color:#fff; cursor:pointer; font-size:13px; font-family:var(--mono); font-weight:600; letter-spacing:1px; transition:all 0.2s; }
+.action-btn:hover { opacity:0.85; transform:translateY(-1px); }
+.action-btn:disabled { opacity:0.4; cursor:wait; transform:none; }
+.action-btn.primary { background:linear-gradient(135deg,#1f6feb,#388bfd); }
+.action-btn.green { background:linear-gradient(135deg,#2ea043,#3fb950); }
+.action-btn.purple { background:linear-gradient(135deg,#8b5cf6,#a78bfa); }
+.output-card { margin-top:16px; padding:14px 18px; background:var(--surface); border:1px solid var(--border); border-radius:8px; position:relative; }
+.output-card .card-label { font-size:10px; color:var(--muted); letter-spacing:1.5px; margin-bottom:6px; text-transform:uppercase; }
+.output-card .card-value { font-size:12px; word-break:break-all; line-height:1.7; user-select:all; max-height:200px; overflow-y:auto; }
+.accent-blue { color:var(--blue); } .accent-green { color:var(--green); } .accent-purple { color:var(--purple); } .accent-orange { color:var(--orange); }
+.border-blue { border-left:3px solid var(--blue); } .border-green { border-left:3px solid var(--green); } .border-purple { border-left:3px solid var(--purple); } .border-orange { border-left:3px solid var(--orange); }
+.copy-btn { position:absolute; top:10px; right:10px; padding:3px 10px; font-family:var(--mono); font-size:10px; color:var(--muted); background:var(--surface2); border:1px solid var(--border); border-radius:4px; cursor:pointer; }
+.copy-btn:hover { color:var(--text); border-color:var(--text); }
+.log { margin-top:16px; padding:14px 18px; background:var(--surface); border:1px solid var(--border); border-radius:8px; font-size:11px; line-height:1.9; color:var(--muted); max-height:240px; overflow-y:auto; }
+.log .ok { color:var(--green); } .log .info { color:var(--blue); } .log .warn { color:var(--orange); } .log .val { color:var(--purple); }
+.progress-bar { height:3px; background:var(--border); border-radius:2px; margin-top:12px; overflow:hidden; }
+.progress-bar .fill { height:100%; background:linear-gradient(90deg,var(--blue),var(--purple)); border-radius:2px; transition:width 0.3s; }
+.badge { display:inline-block; padding:4px 12px; font-size:11px; font-weight:500; border-radius:4px; margin-top:8px; }
+.badge.valid { background:#132d1b; color:var(--green); } .badge.invalid { background:#2d1b1b; color:var(--red); }
+.note { margin-top:20px; padding:16px 20px; background:var(--surface); border:1px solid var(--border); border-radius:8px; font-size:12px; color:var(--muted); line-height:2; }
+.note .title { color:var(--blue); font-weight:600; margin-bottom:6px; }
+@media (max-width:600px) { .header{padding:16px;} .main{padding:16px;} .controls{flex-direction:column;align-items:flex-start;} }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-icon">🔑</div>
+  <div>
+    <h1>DSA PARAM GEN</h1>
+    <p>FIPS 186-4 — MONTGOMERY POWERED</p>
+  </div>
+</div>
+
+<div class="main">
+  <!-- STEP 1 -->
+  <div class="section">
+    <div class="section-header"><span>⚡</span> STEP 1 — 素数 p, q の生成</div>
+    <div class="section-body">
+      <div class="controls">
+        <span class="label">p のビット長:</span>
+        <button class="bit-btn" onclick="setBits(1024,this)">1024</button>
+        <button class="bit-btn active" onclick="setBits(2048,this)">2048</button>
+        <button class="bit-btn" onclick="setBits(3072,this)">3072</button>
+        <span class="label" style="margin-left:8px">カスタム:</span>
+        <input class="custom-input" id="customBits" type="number" min="256" step="64" placeholder="bits" oninput="setBitsCustom(this.value)">
+      </div>
+      <div class="controls">
+        <span class="label">q のビット長:</span>
+        <button class="bit-btn q-btn" onclick="setQBits(160,this)">160</button>
+        <button class="bit-btn q-btn active" onclick="setQBits(256,this)">256</button>
+        <span class="label" style="margin-left:8px">カスタム:</span>
+        <input class="custom-input" id="customQBits" type="number" min="64" step="32" placeholder="bits" oninput="setQBitsCustom(this.value)">
+      </div>
+      <button class="action-btn primary" id="btnGenPQ" onclick="generatePQ()">⚡ p, q を生成</button>
+      <div class="progress-bar" id="progressPQ" style="display:none"><div class="fill" id="fillPQ" style="width:0%"></div></div>
+      <div class="log" id="logPQ" style="display:none"></div>
+      <div id="outputPQ"></div>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="section">
+    <div class="section-header"><span>🔧</span> STEP 2 — 生成元 g の計算</div>
+    <div class="section-body">
+      <p class="label" style="margin-bottom:12px">g = h^((p-1)/q) mod p（モンゴメリ乗算で高速計算）</p>
+      <button class="action-btn green" id="btnGenG" onclick="generateG()" disabled>🔧 g を生成</button>
+      <div class="log" id="logG" style="display:none"></div>
+      <div id="outputG"></div>
+    </div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="section">
+    <div class="section-header"><span>✓</span> STEP 3 — パラメータ検証</div>
+    <div class="section-body">
+      <button class="action-btn purple" id="btnVerify" onclick="verifyParams()" disabled>✓ 検証する</button>
+      <div class="log" id="logVerify" style="display:none"></div>
+      <div id="outputVerify"></div>
+    </div>
+  </div>
+
+  <!-- EXPORT -->
+  <div class="section">
+    <div class="section-header"><span>📋</span> EXPORT — コピー用</div>
+    <div class="section-body">
+      <div id="exportArea" style="font-size:12px;color:var(--muted);">パラメータ生成後に表示されます</div>
+    </div>
+  </div>
+
+  <div class="note">
+    <div class="title">📐 DSA パラメータの関係</div>
+    <div>q は素数、p も素数、かつ q | (p - 1)</div>
+    <div>g = h^((p-1)/q) mod p （g ≠ 1 となる h を選ぶ）</div>
+    <div>g^q ≡ 1 (mod p)　→ g は位数 q の部分群の生成元</div>
+    <div style="margin-top:4px; color:var(--purple);">高速化: モンゴメリ乗算 + スライディングウィンドウ + 篩付き素数探索</div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// State
+// ============================================================
+let pBits = 2048, qBits = 256;
+let paramP = null, paramQ = null, paramG = null;
+let smallPrimesBI = [];
+
+// ============================================================
+// Small primes sieve (generate locally instead of fetching)
+// ============================================================
+function generateSmallPrimes(limit) {
+  const sieve = new Uint8Array(limit + 1);
+  sieve[0] = sieve[1] = 1;
+  for (let i = 2; i * i <= limit; i++) {
+    if (!sieve[i]) for (let j = i * i; j <= limit; j += i) sieve[j] = 1;
+  }
+  const primes = [];
+  for (let i = 2; i <= limit; i++) if (!sieve[i]) primes.push(BigInt(i));
+  return primes;
+}
+
+// Generate ~10000 small primes on load
+smallPrimesBI = generateSmallPrimes(104729); // 10000th prime
+
+// ============================================================
+// UI
+// ============================================================
+function setBits(b, el) {
+  pBits = b;
+  document.querySelectorAll('.bit-btn:not(.q-btn)').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('customBits').value = '';
+}
+function setBitsCustom(v) { const n = parseInt(v); if (n >= 256) { pBits = n; document.querySelectorAll('.bit-btn:not(.q-btn)').forEach(e => e.classList.remove('active')); } }
+function setQBits(b, el) {
+  qBits = b;
+  document.querySelectorAll('.q-btn').forEach(e => e.classList.remove('active'));
+  el.classList.add('active');
+  document.getElementById('customQBits').value = '';
+}
+function setQBitsCustom(v) { const n = parseInt(v); if (n >= 64) { qBits = n; document.querySelectorAll('.q-btn').forEach(e => e.classList.remove('active')); } }
+
+function log(id, msg, cls = '') {
+  const el = document.getElementById(id);
+  el.style.display = 'block';
+  el.innerHTML += `<div${cls ? ` class="${cls}"` : ''}>${msg}</div>`;
+  el.scrollTop = el.scrollHeight;
+}
+function clearLog(id) { const el = document.getElementById(id); el.innerHTML = ''; el.style.display = 'none'; }
+
+function copyVal(btn, text) {
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = 'copied';
+    setTimeout(() => btn.textContent = 'copy', 1200);
+  });
+}
+
+function shortHex(n, d = 30) {
+  const s = n.toString(16).toUpperCase();
+  if (s.length <= d * 2) return s;
+  return s.slice(0, d) + '...' + s.slice(-d) + ` (${s.length} hex / ${s.length * 4}bit)`;
+}
+
+function makeCard(label, hexStr, accentCls, borderCls) {
+  const escaped = hexStr.replace(/`/g, '\\`');
+  return `<div class="output-card ${borderCls}">
+    <div class="card-label">${label}</div>
+    <div class="card-value ${accentCls}">${hexStr}</div>
+    <button class="copy-btn" onclick="copyVal(this,\`${escaped}\`)">copy</button>
+  </div>`;
+}
+
+// ============================================================
+// Montgomery modExp (from マイン's RSA implementation)
+// ============================================================
+function bitLength(n) { if (n === 0n) return 0; return n.toString(2).length; }
+
+function bytesToBigInt(bytes) {
+  const len = bytes.length; let res = 0n;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, len);
+  let i = 0;
+  for (; i <= len - 8; i += 8) res = (res << 64n) + view.getBigUint64(i);
+  for (; i < len; i++) res = (res << 8n) + BigInt(bytes[i]);
+  return res;
+}
+
+function rnd(n) {
+  const bl = bitLength(n);
+  const byteLen = (bl + 7) >> 3;
+  const uint8 = new Uint8Array(byteLen);
+  const mask = (1n << BigInt(bl)) - 1n;
+  while (true) {
+    crypto.getRandomValues(uint8);
+    const num = bytesToBigInt(uint8) & mask;
+    if (num > 0n && num < n) return num;
+  }
+}
+
+function modExp(base, exp, mod) {
+  let k = 5;
+  const bits = bitLength(mod);
+  if (bits > 2048) k = 7; else if (bits > 1024) k = 6;
+
+  const modBits = BigInt(bits);
+  const R = 1n << modBits;
+  const mask = R - 1n;
+
+  // Montgomery constant nPrime
+  let t = 0n, newT = 1n, r = R, m = mod;
+  while (m !== 0n) {
+    const q = r / m;
+    [t, newT] = [newT, t - q * newT];
+    [r, m] = [m, r - q * m];
+  }
+  const nPrime = (R - (t < 0n ? t + R : t)) & mask;
+
+  const reduce = (T) => {
+    const u = ((T & mask) * nPrime) & mask;
+    const x = (T + u * mod) >> modBits;
+    return x >= mod ? x - mod : x;
+  };
+
+  // Sliding window precompute
+  const tableSize = 1 << (k - 1);
+  const table = new Array(tableSize);
+  const baseBar = (base << modBits) % mod;
+  const baseBar2 = reduce(baseBar * baseBar);
+  table[0] = baseBar;
+  for (let i = 1; i < tableSize; i++) table[i] = reduce(table[i - 1] * baseBar2);
+
+  let res = (1n << modBits) % mod;
+  let bitPos = bitLength(exp) - 1;
+
+  while (bitPos >= 0) {
+    const bit = (exp >> BigInt(bitPos)) & 1n;
+    if (!bit) { res = reduce(res * res); bitPos--; }
+    else {
+      let winSize = 1, winVal = 1n;
+      const maxWinSize = Math.min(k, bitPos + 1);
+      for (let j = 1; j < maxWinSize; j++) {
+        winVal = (winVal << 1n) | ((exp >> BigInt(bitPos - j)) & 1n);
+        winSize = j + 1;
+      }
+      while (winSize > 1 && !(winVal & 1n)) { winVal >>= 1n; winSize--; }
+      for (let s = 0; s < winSize; s++) res = reduce(res * res);
+      res = reduce(res * table[Number(winVal >> 1n)]);
+      bitPos -= winSize;
+    }
+  }
+  return reduce(res);
+}
+
+// ============================================================
+// Miller-Rabin with sieve (from マイン's RSA)
+// ============================================================
+function isProbablyPrime(n, k = 15) {
+  if (n <= 3n) return n > 1n;
+  if (!(n & 1n)) return false;
+
+  for (let j = 0; j < smallPrimesBI.length; j++) {
+    if (n % smallPrimesBI[j] === 0n) return n === smallPrimesBI[j];
+  }
+
+  let d = n - 1n, s = 0;
+  while (!(d & 1n)) { d >>= 1n; s++; }
+
+  const nm1 = n - 1n;
+  const bases = [2n, 3n, 5n, 7n, 11n, 13n, 17n, 19n, 23n, 29n, 31n, 37n];
+
+  for (let i = 0; i < k; i++) {
+    const a = i < bases.length ? bases[i] : rnd(nm1);
+    let x = modExp(a, d, n);
+    if (x === 1n || x === nm1) continue;
+    let composite = true;
+    for (let r = 1; r < s; r++) {
+      x = (x * x) % n;
+      if (x === nm1) { composite = false; break; }
+      if (x === 1n) return false;
+    }
+    if (composite) return false;
+  }
+  return true;
+}
+
+// ============================================================
+// Sieve-accelerated prime generation (adapted for DSA)
+// ============================================================
+function generatePrime(bits) {
+  const min = 1n << BigInt(bits - 1);
+  const stepSize = 2000;
+  const sieve = new Uint32Array(Math.ceil(stepSize / 32));
+
+  while (true) {
+    let pBase = bytesToBigInt(crypto.getRandomValues(new Uint8Array(Math.ceil(bits / 8)))) | 1n | min;
+    // Mask to exact bit length
+    const topMask = (1n << BigInt(bits)) - 1n;
+    pBase = pBase & topMask;
+    pBase = pBase | min | 1n;
+
+    const initialRems = new Int32Array(smallPrimesBI.length);
+    for (let j = 0; j < smallPrimesBI.length; j++) initialRems[j] = Number(pBase % smallPrimesBI[j]);
+
+    sieve.fill(0xffffffff);
+    for (let j = 0; j < smallPrimesBI.length; j++) {
+      const pj = Number(smallPrimesBI[j]);
+      let r = initialRems[j];
+      let start = r === 0 ? 0 : pj - r;
+      if (start % 2 !== 0) start += pj;
+      start /= 2;
+      for (let k = start; k < stepSize; k += pj) sieve[k >> 5] &= ~(1 << (k & 31));
+    }
+
+    for (let k = 0; k < stepSize; k++) {
+      if (sieve[k >> 5] & (1 << (k & 31))) {
+        const p = pBase + BigInt(k * 2);
+        if (isProbablyPrime(p, 1)) {
+          if (isProbablyPrime(p, 5)) return p;
+        }
+      }
+    }
+  }
+}
+
+// ============================================================
+// Generate p such that q | (p-1), with sieve acceleration
+// ============================================================
+function generatePWithQ(pBitsTarget, q) {
+  const min = 1n << BigInt(pBitsTarget - 1);
+  const max = (1n << BigInt(pBitsTarget)) - 1n;
+  const kBits = pBitsTarget - bitLength(q);
+
+  while (true) {
+    // Random k, ensure p = kq + 1 is odd => k must be even (since q is odd)
+    let k = bytesToBigInt(crypto.getRandomValues(new Uint8Array(Math.ceil(kBits / 8))));
+    const kMask = (1n << BigInt(kBits)) - 1n;
+    k = k & kMask;
+    if (k % 2n === 1n) k += 1n;
+
+    const p = k * q + 1n;
+    if (p < min || p > max) continue;
+
+    // Quick trial division
+    let bad = false;
+    for (let j = 0; j < Math.min(smallPrimesBI.length, 1000); j++) {
+      if (p % smallPrimesBI[j] === 0n) { bad = true; break; }
+    }
+    if (bad) continue;
+
+    if (isProbablyPrime(p, 1)) {
+      if (isProbablyPrime(p, 5)) return p;
+    }
+  }
+}
+
+// ============================================================
+// Main generation flow
+// ============================================================
+async function generatePQ() {
+  const btn = document.getElementById('btnGenPQ');
+  btn.disabled = true; btn.textContent = '⚙ 生成中...';
+  clearLog('logPQ');
+  document.getElementById('outputPQ').innerHTML = '';
+  document.getElementById('outputG').innerHTML = '';
+  document.getElementById('outputVerify').innerHTML = '';
+  document.getElementById('exportArea').textContent = 'パラメータ生成後に表示されます';
+  document.getElementById('btnGenG').disabled = true;
+  document.getElementById('btnVerify').disabled = true;
+  paramP = null; paramQ = null; paramG = null;
+
+  const prog = document.getElementById('progressPQ');
+  const fill = document.getElementById('fillPQ');
+  prog.style.display = 'block'; fill.style.width = '5%';
+
+  log('logPQ', `パラメータ: p=${pBits}bit, q=${qBits}bit`, 'info');
+  log('logPQ', `小さい素数テーブル: ${smallPrimesBI.length}個 (篩用)`, 'info');
+  log('logPQ', `モンゴメリ乗算 + スライディングウィンドウ有効`, 'info');
+
+  await new Promise(r => setTimeout(r, 30));
+
+  try {
+    // Generate q
+    log('logPQ', `q (${qBits}bit素数) を探索中...`, 'info');
+    await new Promise(r => setTimeout(r, 10));
+    const t0 = performance.now();
+    paramQ = generatePrime(qBits);
+    const tq = (performance.now() - t0).toFixed(0);
+    log('logPQ', `<span class="ok">✓</span> q 発見! ${tq}ms`, 'ok');
+    fill.style.width = '30%';
+
+    await new Promise(r => setTimeout(r, 10));
+
+    // Generate p
+    log('logPQ', `p (${pBits}bit, q | p-1) を探索中...`, 'info');
+    const t1 = performance.now();
+    paramP = generatePWithQ(pBits, paramQ);
+    const tp = (performance.now() - t1).toFixed(0);
+    log('logPQ', `<span class="ok">✓</span> p 発見! ${tp}ms`, 'ok');
+    fill.style.width = '100%';
+
+    log('logPQ', `<span class="ok">✓</span> 確認: (p-1) mod q = ${(paramP - 1n) % paramQ}`, 'ok');
+    log('logPQ', `合計: ${(parseFloat(tq) + parseFloat(tp)).toFixed(0)}ms`, 'val');
+
+    const pHex = paramP.toString(16).toUpperCase();
+    const qHex = paramQ.toString(16).toUpperCase();
+    const expHex = ((paramP - 1n) / paramQ).toString(16).toUpperCase();
+
+    document.getElementById('outputPQ').innerHTML =
+      makeCard(`p (素数, ${pBits}bit)`, pHex, 'accent-blue', 'border-blue') +
+      makeCard(`q (素数, ${qBits}bit)`, qHex, 'accent-purple', 'border-purple') +
+      makeCard('(p-1)/q', shortHex((paramP - 1n) / paramQ), 'accent-orange', 'border-orange');
+
+    document.getElementById('btnGenG').disabled = false;
+  } catch (e) {
+    log('logPQ', '⚠ エラー: ' + e.message, 'warn');
+  }
+
+  btn.disabled = false; btn.textContent = '⚡ p, q を生成';
+}
+
+async function generateG() {
+  if (!paramP || !paramQ) return;
+  const btn = document.getElementById('btnGenG');
+  btn.disabled = true; btn.textContent = '⚙ 計算中...';
+  clearLog('logG');
+  document.getElementById('outputG').innerHTML = '';
+  paramG = null;
+
+  const exp = (paramP - 1n) / paramQ;
+  log('logG', `g = h^((p-1)/q) mod p をモンゴメリ乗算で計算`, 'info');
+
+  await new Promise(r => setTimeout(r, 30));
+
+  let h = 2n;
+  const t0 = performance.now();
+  while (true) {
+    const g = modExp(h, exp, paramP);
+    if (g !== 1n) {
+      paramG = g;
+      const ms = (performance.now() - t0).toFixed(0);
+      log('logG', `<span class="ok">✓</span> h = ${h} → g ≠ 1、採用! (${ms}ms)`, 'ok');
+      break;
+    }
+    log('logG', `h = ${h} → g = 1 (スキップ)`, 'warn');
+    h++;
+    await new Promise(r => setTimeout(r, 0));
+  }
+
+  const gHex = paramG.toString(16).toUpperCase();
+  document.getElementById('outputG').innerHTML = makeCard(`g (生成元, h=${h})`, gHex, 'accent-green', 'border-green');
+
+  document.getElementById('btnVerify').disabled = false;
+  btn.disabled = false; btn.textContent = '🔧 g を生成';
+}
+
+async function verifyParams() {
+  if (!paramP || !paramQ || !paramG) return;
+  const btn = document.getElementById('btnVerify');
+  btn.disabled = true; btn.textContent = '⚙ 検証中...';
+  clearLog('logVerify');
+  document.getElementById('outputVerify').innerHTML = '';
+
+  let allOk = true;
+
+  log('logVerify', `検証開始...`, 'info');
+  await new Promise(r => setTimeout(r, 30));
+
+  // p prime
+  const t0 = performance.now();
+  if (isProbablyPrime(paramP, 15)) log('logVerify', `<span class="ok">✓</span> p はおそらく素数 (MR 15ラウンド)`, 'ok');
+  else { log('logVerify', `⚠ p は素数ではない!`, 'warn'); allOk = false; }
+
+  // q prime
+  if (isProbablyPrime(paramQ, 15)) log('logVerify', `<span class="ok">✓</span> q はおそらく素数`, 'ok');
+  else { log('logVerify', `⚠ q は素数ではない!`, 'warn'); allOk = false; }
+
+  // q | (p-1)
+  if ((paramP - 1n) % paramQ === 0n) log('logVerify', `<span class="ok">✓</span> q | (p-1)`, 'ok');
+  else { log('logVerify', `⚠ q ∤ (p-1)`, 'warn'); allOk = false; }
+
+  // g^q mod p == 1
+  log('logVerify', `g^q mod p を計算中...`, 'info');
+  await new Promise(r => setTimeout(r, 10));
+  const gq = modExp(paramG, paramQ, paramP);
+  if (gq === 1n) log('logVerify', `<span class="ok">✓</span> g^q mod p = 1`, 'ok');
+  else { log('logVerify', `⚠ g^q mod p = ${gq}`, 'warn'); allOk = false; }
+
+  // g != 1, 1 < g < p
+  if (paramG > 1n && paramG < paramP) log('logVerify', `<span class="ok">✓</span> 1 < g < p`, 'ok');
+  else { log('logVerify', `⚠ g が範囲外`, 'warn'); allOk = false; }
+
+  const ms = (performance.now() - t0).toFixed(0);
+  log('logVerify', `検証完了: ${ms}ms`, 'val');
+
+  document.getElementById('outputVerify').innerHTML =
+    `<div class="badge ${allOk ? 'valid' : 'invalid'}">${allOk ? '✓ すべての検証に合格' : '✗ 一部の検証に失敗'}</div>`;
+
+  if (allOk) {
+    const exportText = `// DSA Parameters (p=${pBits}bit, q=${qBits}bit)\n` +
+      `const p = 0x${paramP.toString(16)}n;\n` +
+      `const q = 0x${paramQ.toString(16)}n;\n` +
+      `const g = 0x${paramG.toString(16)}n;\n`;
+    document.getElementById('exportArea').innerHTML =
+      `<pre style="background:var(--surface);padding:16px;border:1px solid var(--border);border-radius:8px;overflow-x:auto;color:var(--text);font-size:11px;line-height:1.8;white-space:pre-wrap;word-break:break-all;position:relative;">${exportText.replace(/&/g,'&amp;').replace(/</g,'&lt;')}<button class="copy-btn" style="position:absolute;top:8px;right:8px;" onclick="navigator.clipboard.writeText(this.parentElement.textContent.replace('copy','').trim());this.textContent='copied';setTimeout(()=>this.textContent='copy',1200)">copy</button></pre>`;
+  }
+
+  btn.disabled = false; btn.textContent = '✓ 検証する';
+}
+</script>
+</body>
+</html>
