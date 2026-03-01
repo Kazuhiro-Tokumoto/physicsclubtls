@@ -165,17 +165,63 @@ export class p_256 {
     hexToBigInt(hex) {
         return BigInt("0x" + hex);
     }
+    generateK(message, privateKey) {
+        const qLen = Math.ceil(this.N.toString(2).length / 8);
+        // ステップa: h1 = hash(message)
+        const h1 = this.sha256(message);
+        // ステップb: V = 0x01 * 32
+        let V = new Uint8Array(qLen).fill(0x01);
+        // ステップc: K = 0x00 * 32
+        let K = new Uint8Array(qLen).fill(0x00);
+        // ステップd: K = HMAC-SHA256(K, V || 0x00 || privateKey || h1)
+        K = this.hmacSha256(K, new Uint8Array([...V, 0x00, ...privateKey, ...h1]));
+        // ステップe: V = HMAC-SHA256(K, V)
+        V = this.hmacSha256(K, V);
+        // ステップf: K = HMAC-SHA256(K, V || 0x01 || privateKey || h1)
+        K = this.hmacSha256(K, new Uint8Array([...V, 0x01, ...privateKey, ...h1]));
+        // ステップg: V = HMAC-SHA256(K, V)
+        V = this.hmacSha256(K, V);
+        // ステップh: 候補を生成してqの範囲に収まるまで繰り返す
+        while (true) {
+            // T を空にする
+            let T = new Uint8Array(0);
+            // T が qLen 以上になるまで V を追加
+            while (T.length < qLen) {
+                V = this.hmacSha256(K, V);
+                T = new Uint8Array([...T, ...V]);
+            }
+            // k候補を取り出す
+            const k = this.bytesToBigInt(T.slice(0, qLen));
+            // 1 <= k <= q-1 なら採用
+            if (k >= 1n && k < this.N) {
+                return k;
+            }
+            // 範囲外なら K, V を更新して再試行
+            K = this.hmacSha256(K, new Uint8Array([...V, 0x00]));
+            V = this.hmacSha256(K, V);
+        }
+    }
+    hmacSha256(key, data) {
+        const BLOCK = 64;
+        const k = key.length > BLOCK ? this.sha256(key) : key;
+        const kPadded = new Uint8Array(BLOCK);
+        kPadded.set(k);
+        const ipad = kPadded.map((b) => b ^ 0x36);
+        const opad = kPadded.map((b) => b ^ 0x5c);
+        return this.sha256(this.concat(opad, this.sha256(this.concat(ipad, data))));
+    }
+    concat(...arrays) {
+        const total = arrays.reduce((n, a) => n + a.length, 0);
+        const out = new Uint8Array(total);
+        let offset = 0;
+        for (const a of arrays) {
+            out.set(a, offset);
+            offset += a.length;
+        }
+        return out;
+    }
     signtobigint(message, privateKey) {
-        let k = (this.bytesToBigInt(this.sha256(new Uint8Array([
-            ...this.sha256(new Uint8Array([
-                ...this.BigintToBytes(this.hexToBigInt(privateKey)),
-                ...message,
-            ])),
-            ...message,
-            ...this.BigintToBytes(this.hexToBigInt(privateKey)),
-        ]))) %
-            (this.N - 1n)) +
-            1n;
+        let k = this.generateK(message, this.hexToBigInt(privateKey));
         const privKey = this.hexToBigInt(privateKey);
         const R = this.scalarMult(k, this.G);
         const r = R[0] % this.N;
