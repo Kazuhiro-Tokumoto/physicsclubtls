@@ -517,19 +517,19 @@ export class dsa {
     }
 }
 // 使用例
+const dsaInstance = new dsa();
 const ciphers = new cipher();
 const encoder = new TextEncoder();
 const message = encoder.encode("Hello, World!");
 const key = new Uint8Array(32); // 256-bit key
 globalThis.crypto.getRandomValues(key);
 const encrypted = ciphers.encrypt(message, key);
-console.log("Encrypted:", encrypted);
+console.log("Encrypted:", dsaInstance.bytesToHex(encrypted));
 const decrypted = ciphers.decrypt(encrypted, key);
 if (decrypted) {
     const decoder = new TextDecoder();
     console.log("Decrypted:", decoder.decode(decrypted));
 }
-const dsaInstance = new dsa();
 console.time("DSA Key Generation");
 const { privatekey, publickey } = dsaInstance.getkeypair();
 console.timeEnd("DSA Key Generation");
