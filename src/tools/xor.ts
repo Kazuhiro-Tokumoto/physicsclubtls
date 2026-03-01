@@ -635,6 +635,19 @@ console.log("publickey(b64):", btoa(String.fromCharCode(...publickey)));
 console.log("message(b64):", btoa(String.fromCharCode(...message)));
 console.log("message(utf8):", new TextDecoder().decode(message));
 console.log("privatekey(b64):", btoa(String.fromCharCode(...privatekey)));
+console.log("alice bob key exchange:");
+const alice = dsaInstance.getKeypairhex();
+const bob = dsaInstance.getKeypairhex();
+console.log("Alice Public Key:", alice.publickey);
+console.log("Bob Public Key:", bob.publickey);
+console.log("Alice private Key:", alice.privatekey);
+console.log("Bob private Key:", bob.privatekey);
+const aliceShared = dsaInstance.dh(alice.privatekey, bob.publickey);
+const bobShared = dsaInstance.dh(bob.privatekey, alice.publickey);
+console.log("Alice's Shared Secret:", aliceShared);
+console.log("Bob's Shared Secret:", bobShared);
+console.log("Shared secrets match?", aliceShared === bobShared);
+
 // =====================================================================
 // DOM操作
 // =====================================================================
