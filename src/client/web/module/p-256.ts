@@ -266,7 +266,7 @@ export class p_256 {
     message: Uint8Array,
     privateKey: string,
   ): { r: bigint; s: bigint } {
-    let k = this.generateK(message, this.hexToBigInt(privateKey) as unknown as Uint8Array);
+    let k = this.generateK(message, this.BigintToBytes(this.hexToBigInt(privateKey)));
     const privKey = this.hexToBigInt(privateKey);
     const R = this.scalarMult(k, this.G);
     const r = R[0] % this.N;

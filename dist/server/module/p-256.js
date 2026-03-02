@@ -221,7 +221,7 @@ export class p_256 {
         return out;
     }
     signtobigint(message, privateKey) {
-        let k = this.generateK(message, this.hexToBigInt(privateKey));
+        let k = this.generateK(message, this.BigintToBytes(this.hexToBigInt(privateKey)));
         const privKey = this.hexToBigInt(privateKey);
         const R = this.scalarMult(k, this.G);
         const r = R[0] % this.N;
