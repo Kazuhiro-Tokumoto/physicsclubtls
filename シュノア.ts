@@ -1,5 +1,5 @@
 
-class a {
+class shunoa {
   // --- 定数定義 ---
   private readonly p: bigint = BigInt("0xFFFFFFFFFFFFFFFFC90FDAA22168C234C4C6628B80DC1CD129024E088A67CC74020BBEA63B139B22514A08798E3404DDEF9519B3CD3A431B302B0A6DF25F14374FE1356D6D51C245E485B576625E7EC6F44C42E9A637ED6B0BFF5CB6F406B7EDEE386BFB5A899FA5AE9F24117C4B1FE649286651ECE45B3DC2007CB8A163BF0598DA48361C55D39A69163FA8FD24CF5F83655D23DCA3AD961C62F356208552BB9ED529077096966D670C354E4ABC9804F1746C08CA237327FFFFFFFFFFFFFFFF");
   private readonly g: bigint = 2n;
@@ -150,8 +150,7 @@ class a {
     const msgData = new TextEncoder().encode(message);
     
     // 決定論的 k 生成 (RFC 6979 的アプローチ)
-    const kSeed = new Uint8Array([...privateKey, ...msgData]);
-    const k = (this.hashToBigInt(kSeed)) % this.q;
+    const k = this.generateK(msgData, privateKey);
 
     const R = this.modExp(this.g, k, this.p);
     const R_bytes = this.bigintToUint8Array(R);
@@ -163,6 +162,88 @@ class a {
     signature.set(R_bytes, 0);
     signature.set(this.bigintToUint8Array(s), 256);
     return signature;
+  }
+
+    private generateK(message: Uint8Array, privateKey: Uint8Array): bigint {
+  const qLen = Math.ceil(this.q.toString(2).length / 8);
+
+  // ステップa: h1 = hash(message)
+  const h1 = this.sha256(message);
+
+  // ステップb: V = 0x01 * 32
+  let V = new Uint8Array(qLen).fill(0x01);
+
+  // ステップc: K = 0x00 * 32
+  let K = new Uint8Array(qLen).fill(0x00);
+
+  // ステップd: K = HMAC-SHA256(K, V || 0x00 || privateKey || h1)
+  K = this.hmacSha256(K, new Uint8Array([...V, 0x00, ...privateKey, ...h1])) as Uint8Array<ArrayBuffer>;
+
+  // ステップe: V = HMAC-SHA256(K, V)
+  V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
+
+  // ステップf: K = HMAC-SHA256(K, V || 0x01 || privateKey || h1)
+  K = this.hmacSha256(K, new Uint8Array([...V, 0x01, ...privateKey, ...h1])) as Uint8Array<ArrayBuffer>;
+
+  // ステップg: V = HMAC-SHA256(K, V)
+  V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
+
+  // ステップh: 候補を生成してqの範囲に収まるまで繰り返す
+    while (true) {
+      // T を空にする
+      let T = new Uint8Array(0);
+
+      // T が qLen 以上になるまで V を追加
+      while (T.length < qLen) {
+        V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
+        T = new Uint8Array([...T, ...V]);
+      }
+
+      // k候補を取り出す
+      const k = this.bytesToBigInt(T.slice(0, qLen));
+
+      // 1 <= k <= q-1 なら採用
+      if (k >= 1n && k < this.q) {
+        return k;
+      }
+
+      // 範囲外なら K, V を更新して再試行
+      K = this.hmacSha256(K, new Uint8Array([...V, 0x00])) as Uint8Array<ArrayBuffer>;
+      V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
+    }
+  }
+  private hmacSha256(key: Uint8Array, data: Uint8Array): Uint8Array {
+    const BLOCK = 64;
+    const k = key.length > BLOCK ? this.sha256(key) : key;
+    const kPadded = new Uint8Array(BLOCK);
+    kPadded.set(k);
+    const ipad = kPadded.map((b) => b ^ 0x36);
+    const opad = kPadded.map((b) => b ^ 0x5c);
+    return this.sha256(this.concat(opad, this.sha256(this.concat(ipad, data))));
+  }
+  private concat(...arrays: Uint8Array[]): Uint8Array {
+    const total = arrays.reduce((n, a) => n + a.length, 0);
+    const out = new Uint8Array(total);
+    let offset = 0;
+    for (const a of arrays) {
+      out.set(a, offset);
+      offset += a.length;
+    }
+    return out;
+  }
+    public bytesToBigInt(bytes: Uint8Array): bigint {
+    const len = bytes.length;
+    let res = 0n;
+    const view = new DataView(bytes.buffer, bytes.byteOffset, len);
+
+    let i = 0;
+    for (; i <= len - 8; i += 8) {
+      res = (res << 64n) + view.getBigUint64(i);
+    }
+    for (; i < len; i++) {
+      res = (res << 8n) + BigInt(bytes[i]);
+    }
+    return res;
   }
 
   /** 署名の検証 */
@@ -187,3 +268,17 @@ class a {
   }
 }
 
+const shunoaInstance = new shunoa();
+const privateKey = new Uint8Array(32)
+globalThis.crypto.getRandomValues(privateKey);
+const publicKey = shunoaInstance.getPublicKey(privateKey);
+const message = "Hello, Shunoa!";
+const signature = shunoaInstance.sign(message, privateKey);
+const isValid = shunoaInstance.verify(message, signature, publicKey);
+console.log("Public Key:", Buffer.from(publicKey).toString("hex"));
+console.log("Signature:", Buffer.from(signature).toString("hex"));
+console.log("Verification Result:", isValid);
+console.log("改ざん検査 (メッセージ変更):", shunoaInstance.verify(message + "!", signature, publicKey));
+console.log("改ざん検査 (署名変更):", shunoaInstance.verify(message, new Uint8Array(signature.map(b => b ^ 0xFF)), publicKey));
+console.log("改ざん検査 (公開鍵変更):", shunoaInstance.verify(message, signature, new Uint8Array(publicKey.map(b => b ^ 0xFF))));
+console.log("privateKey:", Buffer.from(privateKey).toString("hex"));
