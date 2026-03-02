@@ -1,14 +1,9 @@
-
-class shunoa {
-  // --- 定数定義 ---
-// DSA Parameters (p=2048bit, q=256bit)
- p = 0xbd0c0b397e570743e878df646271fba5f0f5502f306f48a11ee47e25184a5e058aa4e90c4a9e036fc11f1c0f4d2bd89ec4cbc0eff98f940ebea67586e4d14f3ccc61ab3b72e5e0dc60272bc9a61e29fcf89e16ae74a6390a0d07845040d44c155519a900b5ab922aa52d247f774177f9cbb25bd2994591005edc35ed2ec68f9a40a5320aa53766aa0a34a562e7b93baa6969880f9a87f9e4cf79b8050dc5a661c3e08d21809c68f1390737232ce892ff68a2af25c5995af26d02b09e0bf25969828e9d8403f96ea5cac29a402cd7805ca19608cf04419a94d8e3c8e8e1f8a1170e45b397156f97100b6ab8cea28980327c4723c3fd4a263c5a6a0b6ad6680129n;
- q = 0xcab6f751ec805dd2f633e4afcd4e85492198e2a75389ba02e489fd468a482f95n;
- g = 0x2b25d1c3631e0aba48f84cab56ffc21a37e1f318509c1a21e037bfa2e03411bd427702151d764ee67af81d22a6dac38ef499261acf050dee96b40b397994f51759c176f88a2f6016eadabec8c8d372446b1f9e8a23c438ee9f9cc46c5eec98c945ef5bd84c02a2d85591911eba33246e867e9ab674e10e804078bad81b4906996e37142554445165ebe03a55726aa97dbfd58998bac3cc8586a4c55e5864de39e4b2b0bf550f6ce91ab0e78dcae27768374e1a0a69626c16094d8fa03c98dfdfe33b29363ebff5cda986ac65669f70d26985e9a08a032812457cee49fd9d350c651187e2be8f90fe102322261188fd77fa46a08b13f64e3440ce99fb47df00cdn;
-  constructor() {}
-
-  // --- 変換ユーティリティ ---
-  public sha256(data: Uint8Array): Uint8Array {
+class syunoa {
+  private p = 0x9714274a520c2a7015d654d9703e4428fec7ba0c648e0f6dd3ca6347837764adn;
+  private q = 0xf359c9c1f8c281129933a74b1f542bbc3364bb13n;
+  private g = 0x50353a782f629d94b260b900177baf0d80df53c8750bed7ee7c3e4c16e2042d1n;
+  
+  private sha256(data: Uint8Array): Uint8Array {
     const K = new Uint32Array([
       0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
       0x923f82a4, 0xab1c5ed5, 0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3,
@@ -102,183 +97,52 @@ class shunoa {
     return result;
   }
 
-  private bigintToUint8Array(bn: bigint): Uint8Array {
-    let hex = bn.toString(16);
-    if (hex.length % 2) hex = '0' + hex;
-    const len = hex.length / 2;
-    const u8 = new Uint8Array(256); // 2048bit = 256byte
-    for (let i = 0; i < len; i++) {
-      u8[256 - len + i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-    }
-    return u8;
-  }
-
-  private uint8ArrayToBigInt(u8: Uint8Array): bigint {
-    let hex = "";
-    u8.forEach(b => hex += b.toString(16).padStart(2, "0"));
-    return BigInt("0x" + hex);
-  }
-
-  private hashToBigInt(data: Uint8Array): bigint {
-    const hashBuffer =  this.sha256(data);
-    return this.uint8ArrayToBigInt(new Uint8Array(hashBuffer));
-  }
-
-  private modExp(base: bigint, exp: bigint, mod: bigint): bigint {
-    let res = 1n;
+  private modPow(base: bigint, exp: bigint, mod: bigint): bigint {
+    let result = 1n;
     base = base % mod;
     while (exp > 0n) {
-      if (exp % 2n === 1n) res = (res * base) % mod;
+      if (exp & 1n) result = (result * base) % mod;
       base = (base * base) % mod;
-      exp = exp / 2n;
+      exp >>= 1n;
     }
-    return res;
+    return result;
   }
 
-  // --- 公開メソッド ---
-
-  /** 公開鍵の生成 */
-  public  getPublicKey(privateKey: Uint8Array): Uint8Array {
-    const priv = this.uint8ArrayToBigInt(privateKey);
-    const pub = this.modExp(this.g, priv, this.p);
-    return this.bigintToUint8Array(pub);
+  public genkey(x: bigint): bigint {
+    return this.modPow(this.g, x, this.p);
   }
-
-  /** 署名の生成 (R + s = 512バイト) */
-  public sign(message: string, privateKey: Uint8Array): Uint8Array {
-    const priv = this.uint8ArrayToBigInt(privateKey);
-    const msgData = new TextEncoder().encode(message);
-    
-    // 決定論的 k 生成 (RFC 6979 的アプローチ)
-    const k = this.generateK(msgData, privateKey);
-
-    const R = this.modExp(this.g, k, this.p);
-    const R_bytes = this.bigintToUint8Array(R);
-    
-    const e = (this.hashToBigInt(new Uint8Array([...R_bytes, ...msgData]))) % this.q;
-    const s = (k + (e * priv)) % this.q;
-
-    const signature = new Uint8Array(512);
-    signature.set(R_bytes, 0);
-    signature.set(this.bigintToUint8Array(s), 256);
-    return signature;
+  public sign(message: Uint8Array, x: bigint): {r: bigint, s: bigint} {
+    const k = this.sha256(new Uint8Array([...message, ...this.BigintToBytes(x)])).reduce((acc, b) => (acc << 8n) | BigInt(b), 0n) % this.q;
+    const r = this.modPow(this.g, k, this.p)
+    const e = BigInt('0x' + Array.from(this.sha256(new Uint8Array([...message, ...this.BigintToBytes(r)]))).map(b => b.toString(16).padStart(2, '0')).join('')) % this.q;
+    const s = (k + e * x) % this.q;
+    return {r, s};
   }
-
-    private generateK(message: Uint8Array, privateKey: Uint8Array): bigint {
-  const qLen = Math.ceil(this.q.toString(2).length / 8);
-
-  // ステップa: h1 = hash(message)
-  const h1 = this.sha256(message);
-
-  // ステップb: V = 0x01 * 32
-  let V = new Uint8Array(qLen).fill(0x01);
-
-  // ステップc: K = 0x00 * 32
-  let K = new Uint8Array(qLen).fill(0x00);
-
-  // ステップd: K = HMAC-SHA256(K, V || 0x00 || privateKey || h1)
-  K = this.hmacSha256(K, new Uint8Array([...V, 0x00, ...privateKey, ...h1])) as Uint8Array<ArrayBuffer>;
-
-  // ステップe: V = HMAC-SHA256(K, V)
-  V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
-
-  // ステップf: K = HMAC-SHA256(K, V || 0x01 || privateKey || h1)
-  K = this.hmacSha256(K, new Uint8Array([...V, 0x01, ...privateKey, ...h1])) as Uint8Array<ArrayBuffer>;
-
-  // ステップg: V = HMAC-SHA256(K, V)
-  V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
-
-  // ステップh: 候補を生成してqの範囲に収まるまで繰り返す
-    while (true) {
-      // T を空にする
-      let T = new Uint8Array(0);
-
-      // T が qLen 以上になるまで V を追加
-      while (T.length < qLen) {
-        V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
-        T = new Uint8Array([...T, ...V]);
+  private BigintToBytes(n: bigint, byteLength: number = 32): Uint8Array {
+      const hex = n.toString(16).toUpperCase().padStart(byteLength * 2, "0");
+      const bytes = new Uint8Array(byteLength);
+      for (let i = 0; i < byteLength; i++) {
+          bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
       }
-
-      // k候補を取り出す
-      const k = this.bytesToBigInt(T.slice(0, qLen));
-
-      // 1 <= k <= q-1 なら採用
-      if (k >= 1n && k < this.q) {
-        return k;
-      }
-
-      // 範囲外なら K, V を更新して再試行
-      K = this.hmacSha256(K, new Uint8Array([...V, 0x00])) as Uint8Array<ArrayBuffer>;
-      V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
-    }
-  }
-  private hmacSha256(key: Uint8Array, data: Uint8Array): Uint8Array {
-    const BLOCK = 64;
-    const k = key.length > BLOCK ? this.sha256(key) : key;
-    const kPadded = new Uint8Array(BLOCK);
-    kPadded.set(k);
-    const ipad = kPadded.map((b) => b ^ 0x36);
-    const opad = kPadded.map((b) => b ^ 0x5c);
-    return this.sha256(this.concat(opad, this.sha256(this.concat(ipad, data))));
-  }
-  private concat(...arrays: Uint8Array[]): Uint8Array {
-    const total = arrays.reduce((n, a) => n + a.length, 0);
-    const out = new Uint8Array(total);
-    let offset = 0;
-    for (const a of arrays) {
-      out.set(a, offset);
-      offset += a.length;
-    }
-    return out;
-  }
-    public bytesToBigInt(bytes: Uint8Array): bigint {
-    const len = bytes.length;
-    let res = 0n;
-    const view = new DataView(bytes.buffer, bytes.byteOffset, len);
-
-    let i = 0;
-    for (; i <= len - 8; i += 8) {
-      res = (res << 64n) + view.getBigUint64(i);
-    }
-    for (; i < len; i++) {
-      res = (res << 8n) + BigInt(bytes[i]);
-    }
-    return res;
+      return bytes;
   }
 
-  /** 署名の検証 */
-  public verify(message: string, signature: Uint8Array, publicKey: Uint8Array): boolean {
-    if (signature.length !== 512) return false;
-    
-    const pub = this.uint8ArrayToBigInt(publicKey);
-    const msgData = new TextEncoder().encode(message);
-    
-    const R_bytes = signature.slice(0, 256);
-    const s_bytes = signature.slice(256, 512);
-    
-    const R = this.uint8ArrayToBigInt(R_bytes);
-    const s = this.uint8ArrayToBigInt(s_bytes);
-    
-    const e = (this.hashToBigInt(new Uint8Array([...R_bytes, ...msgData]))) % this.q;
-
-    const leftSide = this.modExp(this.g, s, this.p);
-    const rightSide = (R * this.modExp(pub, e, this.p)) % this.p;
-
-    return leftSide === rightSide;
+  public verify(message: Uint8Array, r: bigint, s: bigint, y: bigint): boolean {
+    if (r <= 0n || r >= this.p || s <= 0n || s >= this.q) return false;
+    const e = BigInt('0x' + Array.from(this.sha256(new Uint8Array([...message, ...this.BigintToBytes(r)]))).map(b => b.toString(16).padStart(2, '0')).join('')) % this.q;
+    const gpows = this.modPow(this.g, s, this.p);
+    const ypowe = this.modPow(y, e, this.p);
+    const rmodp = r % this.p;
+    return gpows === (r * ypowe) % this.p;
   }
 }
 
-const shunoaInstance = new shunoa();
-const privateKey = new Uint8Array(32)
-globalThis.crypto.getRandomValues(privateKey);
-const publicKey = shunoaInstance.getPublicKey(privateKey);
-const message = "Hello, Shunoa!";
-const signature = shunoaInstance.sign(message, privateKey);
-const isValid = shunoaInstance.verify(message, signature, publicKey);
-console.log("Public Key:", Buffer.from(publicKey).toString("hex"));
-console.log("Signature:", Buffer.from(signature).toString("hex"));
-console.log("Verification Result:", isValid);
-console.log("改ざん検査 (メッセージ変更):", shunoaInstance.verify(message + "!", signature, publicKey));
-console.log("改ざん検査 (署名変更):", shunoaInstance.verify(message, new Uint8Array(signature.map(b => b ^ 0xFF)), publicKey));
-console.log("改ざん検査 (公開鍵変更):", shunoaInstance.verify(message, signature, new Uint8Array(publicKey.map(b => b ^ 0xFF))));
-console.log("privateKey:", Buffer.from(privateKey).toString("hex"));
+const syunoaInstance = new syunoa();
+const privkey=8167519870365982464598178956789716598267350983276n
+const key = syunoaInstance.genkey(8167519870365982464598178956789716598267350983276n);
+const message = new TextEncoder().encode("Hello, world!");
+const signature = syunoaInstance.sign(message, privkey);
+const isValid = syunoaInstance.verify(message, signature.r, signature.s, key);
+console.log("Public Key:", key.toString(16));
+console.log("Signature:", {r: signature.r.toString(16), s: signature.s.toString(16)});
+console.log("Signature valid:", isValid);
