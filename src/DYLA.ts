@@ -208,11 +208,13 @@ verifyForDomain(
 
   // ===== 署名検証 =====
 
-  static verifyEntry(entry: DYLAEntry, caPubkey: string): boolean {
-    const data = new TextEncoder().encode(DYLA.canonicalJSON(entry.Domain));
-    const hash = DYLA.ec.sha256(data);
-    return DYLA.ec.verify(hash, entry.Sig, caPubkey);
-  }
+static verifyEntry(entry: DYLAEntry, caPubkey: string): boolean {
+  const data = new TextEncoder().encode(DYLA.canonicalJSON(entry.Domain));
+  const hash = DYLA.ec.sha256(data);
+  // 04始まりなら除去してXYのみにする
+  const key = caPubkey.startsWith("04") ? caPubkey.slice(2) : caPubkey;
+  return DYLA.ec.verify(hash, entry.Sig, key);
+}
 
   // ===== Serial検証 =====
 
@@ -255,91 +257,93 @@ verifyForDomain(
 
   // ===== チェーン全体の検証 (仕様 Section 7) =====
 
-    static verifyChain(
-    cert: DYLACertificate,
-    trustStore: TrustStoreEntry[],
-    crl: string[] = [],
-    expectedDomain?: string,
-    now: Date = new Date()
-    ): { valid: boolean; error?: string } {
-    const entries = [...cert.DYLA].sort((a, b) => a.Order - b.Order);
+static verifyChain(
+  cert: DYLACertificate,
+  trustStore: TrustStoreEntry[],
+  crl: string[] = [],
+  expectedDomain?: string,
+  now: Date = new Date(),
+  selfSigned: boolean = false  // ← 追加
+): { valid: boolean; error?: string } {
+  const entries = [...cert.DYLA].sort((a, b) => a.Order - b.Order);
 
-    // 1. 空チェック
-    if (entries.length === 0) {
-        return { valid: false, error: "Empty certificate chain" };
-    }
+  if (entries.length === 0) {
+    return { valid: false, error: "Empty certificate chain" };
+  }
 
-    // 2. Order 0 の CA が trust store に存在するか
-    const root = entries[0];
+  const root = entries[0];
+  let rootPubkey: string;
+
+  if (selfSigned) {
+    // 自己署名: 自分のPubkeyで自分のSigを検証
+    rootPubkey = root.Domain.Pubkey;
+  } else {
+    // trust storeから取得
     const rootTrust = trustStore.find(t => t.CA === root.CA);
     if (!rootTrust) {
-        return { valid: false, error: `Order 0: CA "${root.CA}" not found in trust store` };
+      return { valid: false, error: `Order 0: CA "${root.CA}" not found in trust store` };
+    }
+    rootPubkey = rootTrust.Pubkey;
+  }
+
+  for (let i = 0; i < entries.length; i++) {
+    const entry = entries[i];
+
+    if (entry.Message !== "Do you like apple?") {
+      return { valid: false, error: `DYLA[${i}]: wrong Message` };
     }
 
-    // 3-7. 各エントリを検証
-    for (let i = 0; i < entries.length; i++) {
-        const entry = entries[i];
+    const signerPubkey = i === 0 ? rootPubkey : entries[i - 1].Domain.Pubkey;
 
-        if (entry.Message !== "Do you like apple?") {
-        return { valid: false, error: `DYLA[${i}]: wrong Message` };
-        }
-
-        let signerPubkey: string;
-        if (i === 0) {
-        signerPubkey = rootTrust.Pubkey;
-        } else {
-        signerPubkey = entries[i - 1].Domain.Pubkey;
-        }
-
-        if (!DYLA.verifyEntry(entry, signerPubkey)) {
-        return { valid: false, error: `DYLA[${i}]: signature verification failed` };
-        }
-
-        if (DYLA.isExpired(entry, now)) {
-        return { valid: false, error: `DYLA[${i}]: certificate expired` };
-        }
-
-        if (!DYLA.verifySerial(entry)) {
-        return { valid: false, error: `DYLA[${i}]: serial mismatch` };
-        }
-
-        if (entry.Domain.IsCA && crl.includes(entry.Serial.toLowerCase())) {
-        return { valid: false, error: `DYLA[${i}]: certificate revoked` };
-        }
+    if (!DYLA.verifyEntry(entry, signerPubkey)) {
+      return { valid: false, error: `DYLA[${i}]: signature verification failed` };
     }
 
-    if (expectedDomain) {
-        const lastCN = entries[entries.length - 1].Domain.CN;
-        if (!DYLA.matchDomain(lastCN, expectedDomain)) {
-        return { valid: false, error: `Domain mismatch: ${lastCN} vs ${expectedDomain}` };
-        }
+    if (DYLA.isExpired(entry, now)) {
+      return { valid: false, error: `DYLA[${i}]: certificate expired` };
     }
 
-    return { valid: true };
+    if (!DYLA.verifySerial(entry)) {
+      return { valid: false, error: `DYLA[${i}]: serial mismatch` };
     }
+
+    if (entry.Domain.IsCA && crl.includes(entry.Serial.toLowerCase())) {
+      return { valid: false, error: `DYLA[${i}]: certificate revoked` };
+    }
+  }
+
+  if (expectedDomain) {
+    const lastCN = entries[entries.length - 1].Domain.CN;
+    if (!DYLA.matchDomain(lastCN, expectedDomain)) {
+      return { valid: false, error: `Domain mismatch: ${lastCN} vs ${expectedDomain}` };
+    }
+  }
+
+  return { valid: true };
+}
 
   // ===== ワイルドカードドメインマッチング =====
 
-  private static matchDomain(pattern: string, domain: string): boolean {
-    if (pattern === domain) return true;
-    if (pattern.startsWith("*.")) {
-      const suffix = pattern.slice(2);
-      const parts = domain.split(".");
-      if (parts.length < 2) return false;
-      const domainSuffix = parts.slice(1).join(".");
-      return domainSuffix === suffix;
-    }
-    return false;
+public static matchDomain(pattern: string, domain: string): boolean {
+  if (pattern === domain) return true;
+  if (pattern.startsWith("*.")) {
+    const suffix = pattern.slice(2);
+    const parts = domain.split(".");
+    if (parts.length < 2) return false;
+    const domainSuffix = parts.slice(1).join(".");
+    return domainSuffix === suffix;
   }
+  return false;
+}
 
   // ===== CRL検証 =====
-
-  static verifyCRL(crl: DYLACRL, rootPubkey: string): boolean {
-    if (crl.DYLA_CRL.Message !== "Do you like apple?") return false;
-    const data = new TextEncoder().encode(DYLA.canonicalJSON(crl.DYLA_CRL));
-    const hash = DYLA.ec.sha256(data);
-    return DYLA.ec.verify(hash, crl.Sig, rootPubkey);
-  }
+static verifyCRL(crl: DYLACRL, rootPubkey: string): boolean {
+  if (crl.DYLA_CRL.Message !== "Do you like apple?") return false;
+  const data = new TextEncoder().encode(DYLA.canonicalJSON(crl.DYLA_CRL));
+  const hash = DYLA.ec.sha256(data);
+  const key = rootPubkey.startsWith("04") ? rootPubkey.slice(2) : rootPubkey;
+  return DYLA.ec.verify(hash, crl.Sig, key);
+}
 
   // ===== CRL作成 =====
 

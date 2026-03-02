@@ -2,6 +2,7 @@
 // Build target: ./dist/client/web/index.js
 
 import { DYLA, DYLADomain, DYLAEntry } from "./DYLA.js";
+import { TRUST_STORE } from "./rootkey.js";
 import { p_256 } from "./p-256.js";
 
 const ec = new p_256();
@@ -75,10 +76,12 @@ function toPubkeyUncompressed(compressed: string): string {
 
 
 // Step 0: モード選択
+// ===== renderStep0 差し替え =====
+
 function renderStep0(app: HTMLElement): void {
   app.innerHTML = `
     <div class="card">
-      <div class="step-indicator">Step 1 / 4</div>
+      <div class="step-indicator">DYLA Certificate Tools</div>
       <h1>🍎 DYLA Certificate Issuer</h1>
       <p class="subtitle">Do you like apple?</p>
       <div class="button-group">
@@ -97,13 +100,152 @@ function renderStep0(app: HTMLElement): void {
           証明書ビューワー
           <span class="btn-desc">チェーン情報を表示</span>
         </button>
+        <button id="btn-selfcheck" class="btn btn-secondary">
+          <span class="btn-icon">✍️</span>
+          自己署名チェック
+          <span class="btn-desc">自己署名証明書を検証</span>
+        </button>
+        <button id="btn-verify" class="btn btn-secondary">
+          <span class="btn-icon">🛡️</span>
+          チェーン検証
+          <span class="btn-desc">trust storeで検証</span>
+        </button>
       </div>
     </div>
   `;
   $("btn-new").onclick = () => { state.mode = "new"; state.step = 1; render(); };
   $("btn-import").onclick = () => { state.mode = "import"; state.step = 1; render(); };
   $("btn-viewer").onclick = () => { state.mode = "viewer" as any; state.step = 10; render(); };
+  $("btn-selfcheck").onclick = () => { state.step = 11; render(); };
+  $("btn-verify").onclick = () => { state.step = 12; render(); };
 }
+
+// ===== renderSelfCheck 新規追加 =====
+
+function renderSelfCheck(app: HTMLElement): void {
+  app.innerHTML = `
+    <div class="card">
+      <div class="step-indicator">自己署名チェック</div>
+      <h2>✍️ 自己署名証明書の検証</h2>
+      <div class="form-group">
+        <label>DYLA PEM証明書</label>
+        <textarea id="self-pem" rows="8" placeholder="-----BEGIN DYLA CERTIFICATE-----&#10;...&#10;-----END DYLA CERTIFICATE-----"></textarea>
+      </div>
+      <div class="form-group">
+        <label>ドメイン (任意)</label>
+        <input type="text" id="self-domain" placeholder="例: www.example.com" value="" />
+      </div>
+      <div id="self-error" class="error" style="display:none"></div>
+      <div class="button-row">
+        <button id="btn-back" class="btn btn-ghost">← 戻る</button>
+        <button id="btn-check" class="btn btn-primary">🍎 検証</button>
+      </div>
+      <div id="self-result"></div>
+    </div>
+  `;
+  $("btn-back").onclick = () => { state.step = 0; render(); };
+  $("btn-check").onclick = () => {
+    const pem = ($("self-pem") as HTMLTextAreaElement).value.trim();
+    if (!pem) { showError("self-error", "PEMを入力してください"); return; }
+    try {
+      const cert = DYLA.fromPEM(pem);
+      const domain = ($("self-domain") as HTMLInputElement).value.trim() || undefined;
+      const result = DYLA.verifyChain(cert.raw, [], [], domain, new Date(), true);
+
+      $("self-error").style.display = "none";
+      const el = $("self-result");
+
+      if (result.valid) {
+        let html = `<div class="verify-result verify-ok">
+          <h3>✅ 自己署名検証OK</h3>
+          <div class="field"><span class="label">チェーン長:</span> ${cert.chainLength}</div>
+          <div class="field"><span class="label">最終CN:</span> ${cert.cn}</div>`;
+        if (domain) {
+          const last = cert.endEntity;
+          const matched = last ? DYLA.matchDomain(last.Domain.CN, domain) : false;
+          html += `<div class="field"><span class="label">ドメインマッチ:</span> 
+            <span class="${matched ? "status-ok" : "status-ng"}">${matched ? "✅ " + domain + " → " + last?.Domain.CN : "❌ " + domain + " ≠ " + last?.Domain.CN}</span>
+          </div>`;
+        }
+        html += `</div>`;
+        el.innerHTML = html;
+      } else {
+        el.innerHTML = `<div class="verify-result verify-ng">
+          <h3>❌ 検証失敗</h3>
+          <div>${result.error}</div>
+        </div>`;
+      }
+    } catch (e: any) {
+      showError("self-error", e.message);
+    }
+  };
+}
+
+// ===== renderVerify 新規追加 =====
+
+function renderVerify(app: HTMLElement): void {
+  app.innerHTML = `
+    <div class="card">
+      <div class="step-indicator">チェーン検証</div>
+      <h2>🛡️ Trust Store検証</h2>
+      <div class="form-group">
+        <label>DYLA PEM証明書</label>
+        <textarea id="verify-pem" rows="8" placeholder="-----BEGIN DYLA CERTIFICATE-----&#10;...&#10;-----END DYLA CERTIFICATE-----"></textarea>
+      </div>
+      <div class="form-group">
+        <label>ドメイン (任意)</label>
+        <input type="text" id="verify-domain" placeholder="例: www.example.com" value="" />
+      </div>
+      <div id="verify-error" class="error" style="display:none"></div>
+      <div class="button-row">
+        <button id="btn-back" class="btn btn-ghost">← 戻る</button>
+        <button id="btn-verify-go" class="btn btn-primary">🍎 検証</button>
+      </div>
+      <div id="verify-result"></div>
+    </div>
+  `;
+  $("btn-back").onclick = () => { state.step = 0; render(); };
+  $("btn-verify-go").onclick = () => {
+    const pem = ($("verify-pem") as HTMLTextAreaElement).value.trim();
+    if (!pem) { showError("verify-error", "PEMを入力してください"); return; }
+    try {
+      const cert = DYLA.fromPEM(pem);
+      const domain = ($("verify-domain") as HTMLInputElement).value.trim() || undefined;
+      const result = DYLA.verifyChain(cert.raw, TRUST_STORE, [], domain);
+
+      $("verify-error").style.display = "none";
+      const el = $("verify-result");
+
+      if (result.valid) {
+        let html = `<div class="verify-result verify-ok">
+          <h3>✅ チェーン検証OK</h3>
+          <div class="field"><span class="label">チェーン長:</span> ${cert.chainLength}</div>
+          <div class="field"><span class="label">最終CN:</span> ${cert.cn}</div>
+          <div class="field"><span class="label">ルートCA:</span> ${cert.entries[0]?.CA}</div>`;
+        if (domain) {
+          const last = cert.endEntity;
+          const matched = last ? DYLA.matchDomain(last.Domain.CN, domain) : false;
+          html += `<div class="field"><span class="label">ドメインマッチ:</span> 
+            <span class="${matched ? "status-ok" : "status-ng"}">${matched ? "✅ " + domain + " → " + last?.Domain.CN : "❌ " + domain + " ≠ " + last?.Domain.CN}</span>
+          </div>`;
+        }
+        html += `</div>`;
+        el.innerHTML = html;
+      } else {
+        el.innerHTML = `<div class="verify-result verify-ng">
+          <h3>❌ 検証失敗</h3>
+          <div>${result.error}</div>
+        </div>`;
+      }
+    } catch (e: any) {
+      showError("verify-error", e.message);
+    }
+  };
+}
+
+// ===== render 差し替え =====
+
+
 
 // ===== renderViewer 新規追加 =====
 
@@ -217,6 +359,8 @@ function render(): void {
     case 2: renderStep2(app); break;
     case 3: renderStep3(app); break;
     case 10: renderViewer(app); break;
+    case 11: renderSelfCheck(app); break;
+    case 12: renderVerify(app); break;
   }
 }
 
@@ -629,26 +773,30 @@ function injectStyles(): void {
       font-size: 14px;
     }
 
-    .button-group {
-      display: flex;
-      gap: 12px;
-    }
+.button-group {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+}
 
-    .btn {
-      display: inline-flex;
-      flex-direction: column;
-      align-items: center;
-      gap: 4px;
-      padding: 16px 24px;
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      background: transparent;
-      color: var(--text);
-      cursor: pointer;
-      font-family: inherit;
-      font-size: 15px;
-      transition: all 0.15s;
-    }
+.btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 20px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+  font-family: inherit;
+  font-size: 15px;
+  transition: all 0.15s;
+  text-align: center;
+  width: 100%;
+  box-sizing: border-box;
+}
 
     .btn:hover {
       border-color: var(--accent);
@@ -947,6 +1095,22 @@ function injectStyles(): void {
 .tag-valid {
   background: rgba(74, 222, 128, 0.2);
   color: var(--accent);
+
+  .verify-result {
+  margin-top: 20px;
+  padding: 16px;
+  border-radius: 8px;
+}
+
+.verify-ok {
+  background: rgba(74, 222, 128, 0.1);
+  border: 1px solid var(--accent);
+}
+
+.verify-ng {
+  background: rgba(248, 113, 113, 0.1);
+  border: 1px solid var(--danger);
+}
 }
   `;
   document.head.appendChild(style);

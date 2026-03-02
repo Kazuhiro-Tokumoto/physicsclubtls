@@ -141,7 +141,9 @@ export class DYLA {
     static verifyEntry(entry, caPubkey) {
         const data = new TextEncoder().encode(DYLA.canonicalJSON(entry.Domain));
         const hash = DYLA.ec.sha256(data);
-        return DYLA.ec.verify(hash, entry.Sig, caPubkey);
+        // 04始まりなら除去してXYのみにする
+        const key = caPubkey.startsWith("04") ? caPubkey.slice(2) : caPubkey;
+        return DYLA.ec.verify(hash, entry.Sig, key);
     }
     // ===== Serial検証 =====
     static verifySerial(entry) {
@@ -171,31 +173,32 @@ export class DYLA {
         return { ...partial, Serial: serial };
     }
     // ===== チェーン全体の検証 (仕様 Section 7) =====
-    static verifyChain(cert, trustStore, crl = [], expectedDomain, now = new Date()) {
+    static verifyChain(cert, trustStore, crl = [], expectedDomain, now = new Date(), selfSigned = false // ← 追加
+    ) {
         const entries = [...cert.DYLA].sort((a, b) => a.Order - b.Order);
-        // 1. 空チェック
         if (entries.length === 0) {
             return { valid: false, error: "Empty certificate chain" };
         }
-        // 2. Order 0 の CA が trust store に存在するか
         const root = entries[0];
-        const rootTrust = trustStore.find(t => t.CA === root.CA);
-        if (!rootTrust) {
-            return { valid: false, error: `Order 0: CA "${root.CA}" not found in trust store` };
+        let rootPubkey;
+        if (selfSigned) {
+            // 自己署名: 自分のPubkeyで自分のSigを検証
+            rootPubkey = root.Domain.Pubkey;
         }
-        // 3-7. 各エントリを検証
+        else {
+            // trust storeから取得
+            const rootTrust = trustStore.find(t => t.CA === root.CA);
+            if (!rootTrust) {
+                return { valid: false, error: `Order 0: CA "${root.CA}" not found in trust store` };
+            }
+            rootPubkey = rootTrust.Pubkey;
+        }
         for (let i = 0; i < entries.length; i++) {
             const entry = entries[i];
             if (entry.Message !== "Do you like apple?") {
                 return { valid: false, error: `DYLA[${i}]: wrong Message` };
             }
-            let signerPubkey;
-            if (i === 0) {
-                signerPubkey = rootTrust.Pubkey;
-            }
-            else {
-                signerPubkey = entries[i - 1].Domain.Pubkey;
-            }
+            const signerPubkey = i === 0 ? rootPubkey : entries[i - 1].Domain.Pubkey;
             if (!DYLA.verifyEntry(entry, signerPubkey)) {
                 return { valid: false, error: `DYLA[${i}]: signature verification failed` };
             }
@@ -237,7 +240,8 @@ export class DYLA {
             return false;
         const data = new TextEncoder().encode(DYLA.canonicalJSON(crl.DYLA_CRL));
         const hash = DYLA.ec.sha256(data);
-        return DYLA.ec.verify(hash, crl.Sig, rootPubkey);
+        const key = rootPubkey.startsWith("04") ? rootPubkey.slice(2) : rootPubkey;
+        return DYLA.ec.verify(hash, crl.Sig, key);
     }
     // ===== CRL作成 =====
     static createCRL(revokedSerials, rootPrivateKey) {
