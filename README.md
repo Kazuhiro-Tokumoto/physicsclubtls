@@ -227,7 +227,7 @@ Encrypted private keys are stored in PEM-style format:
       },
       "Sig": "304402201234...",
       "Serial": "b2c3d4e5f6a1...",
-      "Text": "issued by shudo-physics.com",
+      "Text": "example",
       "Message": "Do you like apple?"
     }
   ]
