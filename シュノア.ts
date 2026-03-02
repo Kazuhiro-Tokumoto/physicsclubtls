@@ -132,7 +132,6 @@ class syunoa {
     const e = BigInt('0x' + Array.from(this.sha256(new Uint8Array([...message, ...this.BigintToBytes(r)]))).map(b => b.toString(16).padStart(2, '0')).join('')) % this.q;
     const gpows = this.modPow(this.g, s, this.p);
     const ypowe = this.modPow(y, e, this.p);
-    const rmodp = r % this.p;
     return gpows === (r * ypowe) % this.p;
   }
 }
