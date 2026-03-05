@@ -1,13 +1,4 @@
-// ecsh_optimized.ts — P-256 EC-Schnorr 極限最適化版
-//
-// 検証済み改善一覧 (Node.js実測):
-//   addPointsJacobian : mod 5回削減 → 単体 64ms→25ms (-61%)
-//   shamirsMult Q側   : w=4 → w=5   → 1.80ms→1.32ms/op (-27%)
-//   isPointOnCurve    : x**3n → x*x%P*x、a=-3利用 → 128ms→34ms/10万回 (-74%)
-//   hmacSha256        : map() → for ループ
-//   generateK         : spread演算子 → concat()
-//
-// 予測 verify: ~2.73ms → ~2.0ms
+
 
 export class ecsh {
   private readonly P =
@@ -248,21 +239,21 @@ export class ecsh {
     let V = new Uint8Array(qLen).fill(0x01);
     let K = new Uint8Array(qLen).fill(0x00);
     const b0 = new Uint8Array([0x00]), b1 = new Uint8Array([0x01]);
-    K = this.hmacSha256(K, this.concat(V, b0, privateKey, h1));
-    V = this.hmacSha256(K, V);
-    K = this.hmacSha256(K, this.concat(V, b1, privateKey, h1));
-    V = this.hmacSha256(K, V);
+    K = this.hmacSha256(K, this.concat(V, b0, privateKey, h1)) as Uint8Array<ArrayBuffer>;
+    V = this.hmacSha256(K, V) as  Uint8Array<ArrayBuffer>;
+    K = this.hmacSha256(K, this.concat(V, b1, privateKey, h1)) as Uint8Array<ArrayBuffer>;
+    V = this.hmacSha256(K, V) as  Uint8Array<ArrayBuffer>;
     while (true) {
       let T = new Uint8Array(0);
       while (T.length < qLen) {
-        V = this.hmacSha256(K, V);
+        V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
         const next = new Uint8Array(T.length + V.length);
         next.set(T); next.set(V, T.length); T = next;
       }
       const k = this.bytesToBigInt(T.subarray(0, qLen));
       if (k >= 1n && k < this.N) return k;
-      K = this.hmacSha256(K, this.concat(V, b0));
-      V = this.hmacSha256(K, V);
+      K = this.hmacSha256(K, this.concat(V, b0)) as Uint8Array<ArrayBuffer>;
+      V = this.hmacSha256(K, V) as Uint8Array<ArrayBuffer>;
     }
   }
 
