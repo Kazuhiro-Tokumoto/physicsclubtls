@@ -851,8 +851,10 @@ private scalarMultWindow(k: bigint, P: [bigint, bigint], w: number = 4): [bigint
     const b = el("button", "ct-btn", "検証する");
     b.addEventListener("click", () => {
       try {
+        console.time("verify");
         const valid = dsaInst.verify(enc.encode(ta.value), sigIn.value.trim(), pubIn.value.trim());
         badge.innerHTML = `<span class="ct-badge ${valid ? "valid" : "invalid"}">${valid ? "✓ 署名有効" : "✗ 署名無効"}</span>`;
+        console.timeEnd("verify");
       } catch (e: any) {
         badge.innerHTML = `<span class="ct-badge invalid">エラー: ${(e as any).message}</span>`;
       }
