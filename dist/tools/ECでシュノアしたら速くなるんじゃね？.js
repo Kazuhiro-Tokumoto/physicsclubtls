@@ -1,35 +1,46 @@
+// ecsh_optimized.ts — P-256 ECDSA 極限最適化版
+// 最適化サマリ:
+//   addPointsJacobian : mod 2回削減 (S1,S2,X3,Y3,Z3 の中間mod統合)
+//   doubleJacobian    : 計算順序整理、mod削減
+//   hmacSha256        : map() → for ループ (GC圧力削減)
+//   generateK         : spread演算子 → concat() (O(n)コピー削減)
+//   scalarMult        : テーブルの [P[0],P[1],1n] 生成を1回に
+//   bytesToBigInt     : 変更なし (既に最速実装)
+//   sha256            : 変更なし (既に最速実装)
 export class ecsh {
     P = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffffn;
     a = 0xffffffff00000001000000000000000000000000fffffffffffffffffffffffcn;
-    b = 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604bn; // めんどくさー
+    b = 0x5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604bn;
     N = 0xffffffff00000000ffffffffffffffffbce6faada7179e84f3b9cac2fc632551n;
     G = [
         0x6b17d1f2e12c4247f8bce6e563a440f277037d812deb33a0f4a13945d898c296n,
         0x4fe342e2fe1a7f9b8ee7eb4a7c0f9e162bce33576b315ececbb6406837bf51f5n,
     ];
-    // === 事前計算テーブル (G用, ウィンドウ幅8) ===
-    // G_precomp_window[i][j] = j * 2^(8i) * G  (i=0..31, j=0..255)
-    // テーブルサイズ: 32×256 = 8192点
-    // scalarMultG での加算回数: 64→32 に半減
+    // ─── 事前計算テーブル (G用, w=8) ───────────────────────────────────────
+    // G_precomp_window[i][j] = j * 2^(8i) * G
     G_precomp_window = (() => {
         const table = [];
         let base = [this.G[0], this.G[1], 1n];
-        for (let i = 0; i < 32; i++) { // 256/8 = 32
+        for (let i = 0; i < 32; i++) {
             const row = new Array(256);
-            row[0] = [0n, 1n, 0n];
+            row[0] = [0n, 1n, 0n]; // 単位元
             row[1] = base;
             for (let j = 2; j < 256; j++) {
                 row[j] = this.addPointsJacobian(row[j - 1], base);
             }
             table.push(row);
-            // base = 2^8 * base
             for (let j = 0; j < 8; j++)
                 base = this.doubleJacobian(base);
         }
         return table;
     })();
-    // アフィン座標: 点の加算ごとに inv() が必要
-    // ヤコビアン座標: [X:Y:Z] で表現、inv() は最後の変換時だけ
+    // ─── ヤコビアン点加算 (最適化版) ────────────────────────────────────────
+    // 変更点:
+    //   S1 = Y1*Z2*Z2Z2 % p     (旧: Y1*Z2%p*Z2Z2%p → mod 2回 → 1回に)
+    //   S2 = Y2*Z1*Z1Z1 % p     (同上)
+    //   X3 = (R²-HHH-2*U1HH+4p) % p  (旧: mod(R*R%p - ...) → mod 2回 → 1回に)
+    //   Y3 = (R*(U1HH-X3+p) - S1*HHH + 2p²) % p  (2mod → 1mod)
+    //   Z3 = H*Z1*Z2 % p        (旧: H*Z1%p*Z2%p → mod 2回 → 1回に)
     addPointsJacobian(P, Q) {
         const [X1, Y1, Z1] = P;
         const [X2, Y2, Z2] = Q;
@@ -38,67 +49,128 @@ export class ecsh {
         if (Z2 === 0n)
             return P;
         const p = this.P;
-        const mod = (x) => ((x % p) + p) % p;
-        // 11M + 4S に最適化 (Bernstein formula)
-        const Z1Z1 = Z1 * Z1 % p; // 1M
-        const Z2Z2 = Z2 * Z2 % p; // 1M
-        const U1 = X1 * Z2Z2 % p; // 1M
-        const U2 = X2 * Z1Z1 % p; // 1M
-        const S1 = Y1 * Z2 % p * Z2Z2 % p; // 2M (中間% p省略版)
-        const S2 = Y2 * Z1 % p * Z1Z1 % p; // 2M
-        const H = mod(U2 - U1);
-        const R = mod(S2 - S1);
+        const Z1Z1 = Z1 * Z1 % p;
+        const Z2Z2 = Z2 * Z2 % p;
+        const U1 = X1 * Z2Z2 % p;
+        const U2 = X2 * Z1Z1 % p;
+        // ★ mod 2回 → 1回
+        const S1 = Y1 * Z2 * Z2Z2 % p;
+        const S2 = Y2 * Z1 * Z1Z1 % p;
+        const H = (U2 - U1 + p) % p;
+        const R = (S2 - S1 + p) % p;
         if (H === 0n) {
             if (R === 0n)
                 return this.doubleJacobian(P);
             return [0n, 1n, 0n];
         }
-        const HH = H * H % p; // 1M
-        const HHH = H * HH % p; // 1M
-        const U1HH = U1 * HH % p; // 1M
-        const X3 = mod(R * R % p - HHH - 2n * U1HH); // 1M
-        const Y3 = mod(R * (U1HH - X3) % p - S1 * HHH % p); // 2M
-        const Z3 = H * Z1 % p * Z2 % p; // 2M ← Z1*Z2をまとめない
+        const HH = H * H % p;
+        const HHH = H * HH % p;
+        const U1HH = U1 * HH % p;
+        // ★ X3: mod 2回 → 1回 (4pを足して負を回避)
+        const X3 = (R * R - HHH - 2n * U1HH + 4n * p) % p;
+        // ★ Y3: mod 2回 → 1回 (2p²を足して負を回避)
+        //   R < p, (U1HH-X3+p) < 2p → 積 < 2p²
+        //   S1 < p, HHH < p → S1*HHH < p²
+        //   差 ∈ (-p², 2p²) → +2p² で確実に正
+        const Y3 = (R * (U1HH - X3 + p) - S1 * HHH + 2n * p * p) % p;
+        // ★ Z3: mod 2回 → 1回
+        const Z3 = H * Z1 * Z2 % p;
         return [X3, Y3, Z3];
     }
+    // ─── ヤコビアン点2倍算 ─────────────────────────────────────────────────
+    // a=-3専用の最適化済み実装を維持しつつmod削減
     doubleJacobian(P) {
         const [X, Y, Z] = P;
         if (Z === 0n)
             return P;
         const p = this.P;
-        const YY = (Y * Y) % p;
-        const YYYY = (YY * YY) % p;
-        const ZZ = (Z * Z) % p;
-        const S = (4n * X * YY) % p;
-        // a = -3 専用: M = 3*(X+Z²)*(X-Z²)
-        const M = (3n * (((X + ZZ) % p) * ((X - ZZ + p) % p) % p)) % p;
+        const YY = Y * Y % p;
+        const YYYY = YY * YY % p;
+        const ZZ = Z * Z % p;
+        const S = 4n * X * YY % p;
+        // a=-3 専用: M = 3*(X+ZZ)*(X-ZZ)
+        const M = 3n * ((X + ZZ) % p) * ((X - ZZ + p) % p) % p;
+        // ★ X3: +2p で負を回避して1回のmod
         const X3 = (M * M - 2n * S + 2n * p) % p;
+        // ★ Y3: 計算順序を整理
         const Y3 = (M * ((S - X3 + p) % p) - 8n * YYYY + 8n * p) % p;
-        const Z3 = (2n * Y * Z) % p;
+        const Z3 = 2n * Y * Z % p;
         return [X3, Y3, Z3];
     }
-    // ■ 3. toAffine - 微修正（invZ³の計算順序）
+    // ─── アフィン変換 ───────────────────────────────────────────────────────
     toAffine(P) {
         if (P[2] === 0n)
             return [0n, 0n];
         const invZ = this.inv(P[2], this.P);
-        const invZ2 = (invZ * invZ) % this.P;
-        return [
-            (P[0] * invZ2) % this.P,
-            (P[1] * ((invZ2 * invZ) % this.P)) % this.P,
-        ];
+        const invZ2 = invZ * invZ % this.P;
+        const invZ3 = invZ2 * invZ % this.P;
+        return [P[0] * invZ2 % this.P, P[1] * invZ3 % this.P];
     }
+    // ─── G倍算 (事前計算テーブル, w=8) ─────────────────────────────────────
     scalarMultG(k) {
-        const w = 8;
         let R = [0n, 1n, 0n];
-        for (let i = 0; i < 256; i += w) {
+        for (let i = 0; i < 256; i += 8) {
             const win = Number((k >> BigInt(i)) & 0xffn);
             if (win > 0) {
-                R = this.addPointsJacobian(R, this.G_precomp_window[i / w][win]);
+                R = this.addPointsJacobian(R, this.G_precomp_window[i >> 3][win]);
             }
         }
         return this.toAffine(R);
     }
+    // ─── 一般点倍算 (ヤコビアン w=4) ────────────────────────────────────────
+    // ★ テーブルの baseJ を1回だけ生成 (旧実装は毎ループ[P[0],P[1],1n]生成)
+    scalarMult(k, P) {
+        const w = 4;
+        const windowSize = 1 << w; // 16
+        const baseJ = [P[0], P[1], 1n];
+        const table = new Array(windowSize);
+        table[0] = [0n, 1n, 0n];
+        table[1] = baseJ;
+        for (let i = 2; i < windowSize; i++) {
+            table[i] = this.addPointsJacobian(table[i - 1], baseJ);
+        }
+        let R = [0n, 1n, 0n];
+        for (let i = 256 - w; i >= 0; i -= w) {
+            for (let j = 0; j < w; j++)
+                R = this.doubleJacobian(R);
+            const win = Number((k >> BigInt(i)) & 0xfn);
+            if (win > 0)
+                R = this.addPointsJacobian(R, table[win]);
+        }
+        return this.toAffine(R);
+    }
+    // ─── Shamir's trick (G側テーブル流用 + Q側ヤコビアンw=4) ────────────────
+    shamirsMult(k1, _P1, // G固定なのでテーブルを直接使う
+    k2, P2) {
+        // G側
+        let R1 = [0n, 1n, 0n];
+        for (let i = 0; i < 256; i += 8) {
+            const win = Number((k1 >> BigInt(i)) & 0xffn);
+            if (win > 0) {
+                R1 = this.addPointsJacobian(R1, this.G_precomp_window[i >> 3][win]);
+            }
+        }
+        // Q側 (w=4)
+        const w = 4;
+        const windowSize = 1 << w;
+        const baseJ = [P2[0], P2[1], 1n];
+        const table = new Array(windowSize);
+        table[0] = [0n, 1n, 0n];
+        table[1] = baseJ;
+        for (let i = 2; i < windowSize; i++) {
+            table[i] = this.addPointsJacobian(table[i - 1], baseJ);
+        }
+        let R2 = [0n, 1n, 0n];
+        for (let i = 256 - w; i >= 0; i -= w) {
+            for (let j = 0; j < w; j++)
+                R2 = this.doubleJacobian(R2);
+            const win = Number((k2 >> BigInt(i)) & 0xfn);
+            if (win > 0)
+                R2 = this.addPointsJacobian(R2, table[win]);
+        }
+        return this.toAffine(this.addPointsJacobian(R1, R2));
+    }
+    // ─── SHA-256 (変更なし — 既に最速実装) ──────────────────────────────────
     sha256(data) {
         const K = new Uint32Array([
             0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1,
@@ -118,20 +190,17 @@ export class ecsh {
         let h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
         const len = data.length;
         const bitLen = len * 8;
-        // ★ここを正しく修正★
         const blockCount = Math.ceil((len + 9) / 64);
         const blocks = new Uint8Array(blockCount * 64);
         blocks.set(data);
         blocks[len] = 0x80;
         const view = new DataView(blocks.buffer);
-        // ビット長（big-endian）
         view.setUint32(blocks.length - 8, Math.floor(bitLen / 0x100000000), false);
         view.setUint32(blocks.length - 4, bitLen >>> 0, false);
         for (let i = 0; i < blocks.length; i += 64) {
             const W = new Uint32Array(64);
-            for (let t = 0; t < 16; t++) {
+            for (let t = 0; t < 16; t++)
                 W[t] = view.getUint32(i + t * 4, false);
-            }
             for (let t = 16; t < 64; t++) {
                 const s0 = rotr(W[t - 15], 7) ^ rotr(W[t - 15], 18) ^ (W[t - 15] >>> 3);
                 const s1 = rotr(W[t - 2], 17) ^ rotr(W[t - 2], 19) ^ (W[t - 2] >>> 10);
@@ -164,186 +233,85 @@ export class ecsh {
             h7 = (h7 + h) >>> 0;
         }
         const result = new Uint8Array(32);
-        const resultView = new DataView(result.buffer);
-        resultView.setUint32(0, h0, false);
-        resultView.setUint32(4, h1, false);
-        resultView.setUint32(8, h2, false);
-        resultView.setUint32(12, h3, false);
-        resultView.setUint32(16, h4, false);
-        resultView.setUint32(20, h5, false);
-        resultView.setUint32(24, h6, false);
-        resultView.setUint32(28, h7, false);
+        const rv = new DataView(result.buffer);
+        rv.setUint32(0, h0, false);
+        rv.setUint32(4, h1, false);
+        rv.setUint32(8, h2, false);
+        rv.setUint32(12, h3, false);
+        rv.setUint32(16, h4, false);
+        rv.setUint32(20, h5, false);
+        rv.setUint32(24, h6, false);
+        rv.setUint32(28, h7, false);
         return result;
     }
-    mod25519(x) {
-        let val = x % this.P;
-        if (val < 0n)
-            val += this.P;
-        return val;
-    }
+    // ─── モジュラー逆元 (拡張ユークリッド) ─────────────────────────────────
     inv(e, mod) {
-        let r0 = mod, r1 = e;
-        let x0 = 0n, x1 = 1n;
-        r1 = r1 % mod;
+        let r0 = mod, r1 = ((e % mod) + mod) % mod;
         if (r1 === 0n)
             return 0n;
+        let x0 = 0n, x1 = 1n;
         while (r1 !== 0n) {
             const q = r0 / r1;
-            const r = r0 % r1;
-            r0 = r1;
-            r1 = r;
-            const tmp = x0 - q * x1;
-            x0 = x1;
-            x1 = tmp;
+            [r0, r1] = [r1, r0 - q * r1];
+            [x0, x1] = [x1, x0 - q * x1];
         }
         if (r0 !== 1n)
             return 0n;
         return x0 < 0n ? x0 + mod : x0;
     }
-    addPoints(P, Q) {
-        const [x1, y1] = P;
-        const [x2, y2] = Q;
-        if (x1 === 0n && y1 === 0n)
-            return Q;
-        if (x2 === 0n && y2 === 0n)
-            return P;
-        let m;
-        if (x1 === x2) {
-            if (y1 !== y2 || y1 === 0n)
-                return [0n, 0n];
-            const num = (3n * x1 * x1 + this.a) % this.P;
-            const den = (2n * y1) % this.P;
-            m = (num * this.inv(den, this.P)) % this.P;
-        }
-        else {
-            const num = ((y2 - y1) % this.P + this.P) % this.P;
-            const den = ((x2 - x1) % this.P + this.P) % this.P;
-            m = (num * this.inv(den, this.P)) % this.P;
-        }
-        const x3 = ((m * m - x1 - x2) % this.P + this.P) % this.P;
-        const y3 = ((m * (x1 - x3) - y1) % this.P + this.P) % this.P;
-        return [x3, y3];
-    }
-    scalarMult(k, P) {
-        const w = 4;
-        const windowSize = 1 << w; // 16
-        const table = new Array(windowSize);
-        table[0] = [0n, 1n, 0n];
-        table[1] = [P[0], P[1], 1n];
-        for (let i = 2; i < windowSize; i++) {
-            table[i] = this.addPointsJacobian(table[i - 1], [P[0], P[1], 1n]);
-        }
-        let R = [0n, 1n, 0n];
-        for (let i = 256 - w; i >= 0; i -= w) {
-            for (let j = 0; j < w; j++)
-                R = this.doubleJacobian(R);
-            const win = Number((k >> BigInt(i)) & 0xfn);
-            if (win > 0)
-                R = this.addPointsJacobian(R, table[win]);
-        }
-        return this.toAffine(R);
-    }
-    // ■ shamirsMult - G側テーブル流用 + Q側ヤコビアンw=4
-    //
-    // 戦略: k1*G + k2*Q を分離計算してヤコビアン加算で合成
-    //   G側: 事前計算テーブル(w=8)を流用 → 加算最大32回、ダブリング0回
-    //   Q側: ヤコビアンw=4 → ダブリング64回 + 加算最大64回
-    //   合成: ヤコビアン加算1回 + toAffine 1回
-    //
-    // shamirsMult(wNAF w=5)だと:
-    //   テーブル構築32点 + ダブリング257回 + 加算~100回 + toAffine 1回
-    // こっちの方が軽い（特にダブリング257→64が効く）
-    shamirsMult(k1, P1, k2, P2) {
-        // --- G側: 事前計算テーブル(w=8)で高速計算 ---
-        let R1 = [0n, 1n, 0n];
-        for (let i = 0; i < 256; i += 8) {
-            const win = Number((k1 >> BigInt(i)) & 0xffn);
-            if (win > 0) {
-                R1 = this.addPointsJacobian(R1, this.G_precomp_window[i / 8][win]);
-            }
-        }
-        // --- Q側: ヤコビアン w=4 ---
-        const w = 4;
-        const windowSize = 1 << w;
-        const table = new Array(windowSize);
-        table[0] = [0n, 1n, 0n];
-        table[1] = [P2[0], P2[1], 1n];
-        for (let i = 2; i < windowSize; i++) {
-            table[i] = this.addPointsJacobian(table[i - 1], table[1]);
-        }
-        let R2 = [0n, 1n, 0n];
-        for (let i = 256 - w; i >= 0; i -= w) {
-            for (let j = 0; j < w; j++)
-                R2 = this.doubleJacobian(R2);
-            const win = Number((k2 >> BigInt(i)) & 0xfn);
-            if (win > 0)
-                R2 = this.addPointsJacobian(R2, table[win]);
-        }
-        // --- 合成: R1 + R2 をヤコビアンで加算 ---
-        const combined = this.addPointsJacobian(R1, R2);
-        return this.toAffine(combined);
-    }
-    isPointOnCurve(P) {
-        const [x, y] = P;
-        if (x === 0n && y === 0n)
-            return false;
-        const left = this.mod25519(y * y);
-        const right = this.mod25519(x ** 3n + this.a * x + this.b);
-        return left === right;
-    }
-    bigintToHex(n) {
-        return n.toString(16).toUpperCase().padStart(64, "0");
-    }
-    hexToBigInt(hex) {
-        return BigInt("0x" + hex);
-    }
-    generateK(message, privateKey) {
-        const qLen = Math.ceil(this.N.toString(2).length / 8);
-        // ステップa: h1 = hash(message)
-        const h1 = this.sha256(message);
-        // ステップb: V = 0x01 * 32
-        let V = new Uint8Array(qLen).fill(0x01);
-        // ステップc: K = 0x00 * 32
-        let K = new Uint8Array(qLen).fill(0x00);
-        // ステップd: K = HMAC-SHA256(K, V || 0x00 || privateKey || h1)
-        K = this.hmacSha256(K, new Uint8Array([...V, 0x00, ...privateKey, ...h1]));
-        // ステップe: V = HMAC-SHA256(K, V)
-        V = this.hmacSha256(K, V);
-        // ステップf: K = HMAC-SHA256(K, V || 0x01 || privateKey || h1)
-        K = this.hmacSha256(K, new Uint8Array([...V, 0x01, ...privateKey, ...h1]));
-        // ステップg: V = HMAC-SHA256(K, V)
-        V = this.hmacSha256(K, V);
-        // ステップh: 候補を生成してqの範囲に収まるまで繰り返す
-        while (true) {
-            // T を空にする
-            let T = new Uint8Array(0);
-            // T が qLen 以上になるまで V を追加
-            while (T.length < qLen) {
-                V = this.hmacSha256(K, V);
-                T = new Uint8Array([...T, ...V]);
-            }
-            // k候補を取り出す
-            const k = this.bytesToBigInt(T.slice(0, qLen));
-            // 1 <= k <= q-1 なら採用
-            if (k >= 1n && k < this.N) {
-                return k;
-            }
-            // 範囲外なら K, V を更新して再試行
-            K = this.hmacSha256(K, new Uint8Array([...V, 0x00]));
-            V = this.hmacSha256(K, V);
-        }
-    }
+    // ─── HMAC-SHA256 (最適化: map → for) ────────────────────────────────────
+    // ★ map() はコールバックオブジェクトとGCのオーバーヘッドがある
+    //    forループに変えるだけで小さいが確実に速くなる
     hmacSha256(key, data) {
         const BLOCK = 64;
         const k = key.length > BLOCK ? this.sha256(key) : key;
         const kPadded = new Uint8Array(BLOCK);
         kPadded.set(k);
-        const ipad = kPadded.map((b) => b ^ 0x36);
-        const opad = kPadded.map((b) => b ^ 0x5c);
+        const ipad = new Uint8Array(BLOCK);
+        const opad = new Uint8Array(BLOCK);
+        // ★ map() → for (GCプレッシャー削減)
+        for (let i = 0; i < BLOCK; i++) {
+            ipad[i] = kPadded[i] ^ 0x36;
+            opad[i] = kPadded[i] ^ 0x5c;
+        }
         return this.sha256(this.concat(opad, this.sha256(this.concat(ipad, data))));
     }
+    // ─── RFC 6979 決定論的 k 生成 ────────────────────────────────────────────
+    // ★ spread演算子 [...V, 0x00, ...privateKey, ...h1] → concat() 使用
+    //    Uint8Array の spread は Array.from() 相当で O(n) の要素コピーが走る
+    generateK(message, privateKey) {
+        const qLen = 32; // P-256 は常に 32 バイト
+        const h1 = this.sha256(message);
+        let V = new Uint8Array(qLen).fill(0x01);
+        let K = new Uint8Array(qLen).fill(0x00);
+        // ★ spread → concat
+        const zero = new Uint8Array([0x00]);
+        const one = new Uint8Array([0x01]);
+        K = this.hmacSha256(K, this.concat(V, zero, privateKey, h1));
+        V = this.hmacSha256(K, V);
+        K = this.hmacSha256(K, this.concat(V, one, privateKey, h1));
+        V = this.hmacSha256(K, V);
+        while (true) {
+            let T = new Uint8Array(0);
+            while (T.length < qLen) {
+                V = this.hmacSha256(K, V);
+                const next = new Uint8Array(T.length + V.length);
+                next.set(T);
+                next.set(V, T.length);
+                T = next;
+            }
+            const k = this.bytesToBigInt(T.subarray(0, qLen));
+            if (k >= 1n && k < this.N)
+                return k;
+            K = this.hmacSha256(K, this.concat(V, zero));
+            V = this.hmacSha256(K, V);
+        }
+    }
+    // ─── concat (変更なし) ───────────────────────────────────────────────────
     concat(...arrays) {
-        const total = arrays.reduce((n, a) => n + a.length, 0);
+        let total = 0;
+        for (const a of arrays)
+            total += a.length;
         const out = new Uint8Array(total);
         let offset = 0;
         for (const a of arrays) {
@@ -352,31 +320,31 @@ export class ecsh {
         }
         return out;
     }
+    // ─── 署名 (内部) ─────────────────────────────────────────────────────────
     signtobigint(message, privateKey) {
-        let k = this.generateK(message, this.BigintToBytes(this.hexToBigInt(privateKey)));
+        const privKeyBytes = this.BigintToBytes(this.hexToBigInt(privateKey));
+        const k = this.generateK(message, privKeyBytes);
         const privKey = this.hexToBigInt(privateKey);
-        // ★ scalarMult → scalarMultG
-        let R = this.scalarMultG(k);
+        const R = this.scalarMultG(k);
         const r = R[0];
-        const e = this.bytesToBigInt(this.sha256(new Uint8Array([...message, ...this.BigintToBytes(r)]))) % this.N;
+        const e = this.bytesToBigInt(this.sha256(this.concat(message, this.BigintToBytes(r)))) % this.N;
         const s = ((k - e * privKey) % this.N + this.N) % this.N;
         if (r === 0n || s === 0n) {
             throw new Error("署名値が0になりました。アルゴリズム要件により失敗とみなします。");
         }
         return { R, s };
     }
+    // ─── 署名 (公開) ─────────────────────────────────────────────────────────
     sign(message, privateKey) {
         const { R, s } = this.signtobigint(message, privateKey);
-        return this.bigintToHex(R[0]) + this.bigintToHex(R[1]) + this.bigintToHex(s); // yは常に偶数なので省略
+        return this.bigintToHex(R[0]) + this.bigintToHex(R[1]) + this.bigintToHex(s);
     }
-    // プロファイル用カウンター
+    // ─── 検証 ────────────────────────────────────────────────────────────────
     _prof = {};
     _profTmp = 0;
-    _profStart(name) { this._profTmp = performance.now(); }
+    _profStart(_name) { this._profTmp = performance.now(); }
     _profEnd(name) {
-        if (!this._prof[name])
-            this._prof[name] = 0;
-        this._prof[name] += performance.now() - this._profTmp;
+        this._prof[name] = (this._prof[name] ?? 0) + performance.now() - this._profTmp;
     }
     verify(message, signature, publicKey) {
         this._profStart("decompress_pubkey");
@@ -385,60 +353,99 @@ export class ecsh {
         const py = this.hexToBigInt(uncompressed.slice(64, 128));
         this._profEnd("decompress_pubkey");
         this._profStart("isPointOnCurve");
-        if (this.isPointOnCurve([px, py]) === false) {
+        if (!this.isPointOnCurve([px, py]))
             throw new Error("無効な公開鍵: 曲線上にありません");
-        }
         this._profEnd("isPointOnCurve");
-        this._profStart("decompress_R");
         const Rx = this.hexToBigInt(signature.slice(0, 64));
         const Ry = this.hexToBigInt(signature.slice(64, 128));
         const s = this.hexToBigInt(signature.slice(128, 192));
-        const R = [
-            Rx,
-            Ry,
-        ];
-        this._profEnd("decompress_R");
-        if (R[0] <= 0n || R[0] >= this.N || s <= 0n || s >= this.N)
+        const R = [Rx, Ry];
+        if (Rx <= 0n || Rx >= this.N || s <= 0n || s >= this.N)
             return false;
         this._profStart("hash_e");
-        const e = this.bytesToBigInt(this.sha256(new Uint8Array([...message, ...this.BigintToBytes(R[0])]))) % this.N;
+        const e = this.bytesToBigInt(this.sha256(this.concat(message, this.BigintToBytes(Rx)))) % this.N;
         this._profEnd("hash_e");
         this._profStart("shamirsMult");
         const result = this.shamirsMult(s, this.G, e, [px, py]);
         this._profEnd("shamirsMult");
         return result[0] === R[0] && result[1] === R[1];
     }
-    scalarMultWindow(k, P, w = 4) {
-        const windowSize = 1 << w; // 16
-        // 事前テーブル: 1*P, 2*P, ... 15*P
-        const table = new Array(windowSize);
-        table[1] = P;
-        for (let i = 2; i < windowSize; i++) {
-            table[i] = this.addPoints(table[i - 1], P);
+    // ─── ユーティリティ ──────────────────────────────────────────────────────
+    isPointOnCurve(P) {
+        const [x, y] = P;
+        if (x === 0n && y === 0n)
+            return false;
+        const p = this.P;
+        const left = y * y % p;
+        const right = (x * x * x + this.a * x + this.b) % p;
+        return left === right;
+    }
+    addPoints(P, Q) {
+        const [x1, y1] = P;
+        const [x2, y2] = Q;
+        if (x1 === 0n && y1 === 0n)
+            return Q;
+        if (x2 === 0n && y2 === 0n)
+            return P;
+        const p = this.P;
+        let m;
+        if (x1 === x2) {
+            if (y1 !== y2 || y1 === 0n)
+                return [0n, 0n];
+            m = (3n * x1 * x1 + this.a) % p * this.inv(2n * y1 % p, p) % p;
         }
-        let R = [0n, 0n];
-        const bits = 256;
-        for (let i = bits - w; i >= 0; i -= w) {
-            // w回ダブリング
-            for (let j = 0; j < w; j++) {
-                if (R[0] !== 0n || R[1] !== 0n)
-                    R = this.addPoints(R, R);
-            }
-            const win = Number((k >> BigInt(i)) & BigInt(windowSize - 1));
-            if (win > 0) {
-                R = R[0] === 0n && R[1] === 0n ? table[win] : this.addPoints(R, table[win]);
-            }
+        else {
+            m = (y2 - y1 + p) % p * this.inv((x2 - x1 + p) % p, p) % p;
         }
-        return R;
+        const x3 = (m * m - x1 - x2 + 2n * p) % p;
+        const y3 = (m * (x1 - x3 + p) - y1 + p) % p;
+        return [x3, y3];
     }
     generateKeyPair() {
         const privateKey = this.getRandomBigInt(this.N - 1n) + 1n;
         const pubPoint = this.scalarMult(privateKey, this.G);
-        const uncompressed = this.bigintToHex(pubPoint[0]) + this.bigintToHex(pubPoint[1]);
         return {
             privateKey: this.bigintToHex(privateKey),
-            publicKey: uncompressed,
+            publicKey: this.bigintToHex(pubPoint[0]) + this.bigintToHex(pubPoint[1]),
         };
+    }
+    privateKeyToPublicKey(privateKeyHex) {
+        const privKey = this.hexToBigInt(privateKeyHex);
+        if (privKey <= 0n || privKey >= this.N)
+            throw new Error("無効な秘密鍵");
+        const pubPoint = this.scalarMult(privKey, this.G);
+        const uncompressed = this.bigintToHex(pubPoint[0]) + this.bigintToHex(pubPoint[1]);
+        return { compressed: uncompressed, uncompressed };
+    }
+    ecdh(privateKeyHex, peerPublicKeyHex) {
+        const privKey = this.hexToBigInt(privateKeyHex);
+        if (privKey <= 0n || privKey >= this.N)
+            throw new Error("無効な秘密鍵");
+        const uncompressed = peerPublicKeyHex.length === 66
+            ? this.decompressPublicKey(peerPublicKeyHex)
+            : peerPublicKeyHex;
+        const peerX = this.hexToBigInt(uncompressed.slice(0, 64));
+        const peerY = this.hexToBigInt(uncompressed.slice(64, 128));
+        if (!this.isPointOnCurve([peerX, peerY]))
+            throw new Error("無効な公開鍵");
+        const sharedPoint = this.scalarMult(privKey, [peerX, peerY]);
+        return this.bigintToHex(sharedPoint[0]);
+    }
+    decompressPublicKey(compressed) {
+        const prefix = compressed.slice(0, 2);
+        const x = this.hexToBigInt(compressed.slice(2, 66));
+        const rhs = (x * x * x + this.a * x + this.b) % this.P;
+        const y = this.modSqrt(rhs);
+        const wantOdd = prefix === "03";
+        const finalY = (y % 2n === 1n) === wantOdd ? y : this.P - y;
+        return this.bigintToHex(x) + this.bigintToHex(finalY);
+    }
+    // ─── プリミティブ ────────────────────────────────────────────────────────
+    bigintToHex(n) {
+        return n.toString(16).toUpperCase().padStart(64, "0");
+    }
+    hexToBigInt(hex) {
+        return BigInt("0x" + hex);
     }
     BigintToBytes(n) {
         const hex = n.toString(16).toUpperCase().padStart(64, "0");
@@ -450,34 +457,39 @@ export class ecsh {
     }
     bytesToBigInt(bytes) {
         const len = bytes.length;
-        let res = 0n;
         const view = new DataView(bytes.buffer, bytes.byteOffset, len);
-        let i = 0;
-        for (; i <= len - 8; i += 8) {
+        let res = 0n, i = 0;
+        for (; i <= len - 8; i += 8)
             res = (res << 64n) + view.getBigUint64(i);
-        }
-        for (; i < len; i++) {
+        for (; i < len; i++)
             res = (res << 8n) + BigInt(bytes[i]);
-        }
         return res;
+    }
+    modPow(base, exp, mod) {
+        let result = 1n;
+        base = base % mod;
+        while (exp > 0n) {
+            if (exp & 1n)
+                result = result * base % mod;
+            base = base * base % mod;
+            exp >>= 1n;
+        }
+        return result;
     }
     modSqrt(n) {
         if (n === 0n)
             return 0n;
-        // 修正: 平方剰余かどうかの事前確認。これにより無限ループと指数エラーを防ぐ。
         if (this.modPow(n, (this.P - 1n) / 2n, this.P) !== 1n) {
             throw new Error("平方根が存在しません");
         }
-        let Q = this.P - 1n;
-        let S = 0n;
+        let Q = this.P - 1n, S = 0n;
         while (Q % 2n === 0n) {
             Q /= 2n;
             S++;
         }
         let z = 2n;
-        while (this.modPow(z, (this.P - 1n) / 2n, this.P) !== this.P - 1n) {
+        while (this.modPow(z, (this.P - 1n) / 2n, this.P) !== this.P - 1n)
             z++;
-        }
         let M = S;
         let c = this.modPow(z, Q, this.P);
         let t = this.modPow(n, Q, this.P);
@@ -485,39 +497,17 @@ export class ecsh {
         while (true) {
             if (t === 1n)
                 return R;
-            let i = 1n;
-            let tmp = (t * t) % this.P;
+            let i = 1n, tmp = t * t % this.P;
             while (tmp !== 1n) {
-                tmp = (tmp * tmp) % this.P;
+                tmp = tmp * tmp % this.P;
                 i++;
             }
             const b = this.modPow(c, 2n ** (M - i - 1n), this.P);
             M = i;
-            c = (b * b) % this.P;
-            t = (t * b * b) % this.P;
-            R = (R * b) % this.P;
+            c = b * b % this.P;
+            t = t * b * b % this.P;
+            R = R * b % this.P;
         }
-    }
-    modPow(base, exp, mod) {
-        let result = 1n;
-        base = base % mod;
-        while (exp > 0n) {
-            if (exp & 1n)
-                result = (result * base) % mod;
-            base = (base * base) % mod;
-            exp >>= 1n;
-        }
-        return result;
-    }
-    decompressPublicKey(compressed) {
-        const prefix = compressed.slice(0, 2);
-        const x = this.hexToBigInt(compressed.slice(2, 66));
-        const rhs = this.mod25519(x * x * x + this.a * x + this.b);
-        const y = this.modSqrt(rhs);
-        const isOdd = y % 2n === 1n;
-        const wantOdd = prefix === "03";
-        const finalY = isOdd === wantOdd ? y : this.P - y;
-        return this.bigintToHex(x) + this.bigintToHex(finalY);
     }
     getRandomBigInt(max) {
         const bytes = Math.ceil(max.toString(2).length / 8);
@@ -528,32 +518,6 @@ export class ecsh {
             rand = this.bytesToBigInt(buf);
         } while (rand >= max);
         return rand;
-    }
-    privateKeyToPublicKey(privateKeyHex) {
-        const privKey = this.hexToBigInt(privateKeyHex);
-        if (privKey <= 0n || privKey >= this.N)
-            throw new Error("無効な秘密鍵");
-        const pubPoint = this.scalarMult(privKey, this.G);
-        const uncompressed = this.bigintToHex(pubPoint[0]) + this.bigintToHex(pubPoint[1]);
-        return {
-            compressed: uncompressed,
-            uncompressed,
-        };
-    }
-    ecdh(privateKeyHex, peerPublicKeyHex) {
-        const privKey = this.hexToBigInt(privateKeyHex);
-        if (privKey <= 0n || privKey >= this.N)
-            throw new Error("無効な秘密鍵");
-        const uncompressed = peerPublicKeyHex.length === 66
-            ? this.decompressPublicKey(peerPublicKeyHex)
-            : peerPublicKeyHex;
-        const peerX = this.hexToBigInt(uncompressed.slice(0, 64));
-        const peerY = this.hexToBigInt(uncompressed.slice(64, 128));
-        if (!this.isPointOnCurve([peerX, peerY])) {
-            throw new Error("無効な公開鍵");
-        }
-        const sharedPoint = this.scalarMult(privKey, [peerX, peerY]);
-        return this.bigintToHex(sharedPoint[0]);
     }
 }
 (() => {
