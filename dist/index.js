@@ -22,6 +22,7 @@ const state = {
     city: "",
     isCA: false,
     text: "",
+    selfSigned: false,
     resultPEM: "",
     resultPrivateKey: "",
     resultPublicKey: "",
@@ -110,7 +111,7 @@ function renderSelfCheck(app) {
         try {
             const cert = DYLA.fromPEM(pem);
             const domain = $("self-domain").value.trim() || undefined;
-            const result = DYLA.verifyChain(cert.raw, [], [], domain, new Date(), true);
+            const result = DYLA.verifyChain(cert.raw, [], [], domain, new Date());
             $("self-error").style.display = "none";
             const el = $("self-result");
             if (result.valid) {
@@ -345,6 +346,14 @@ function renderStep1(app) {
           <label>秘密鍵 (hex) — 空欄で自動生成</label>
           <input type="text" id="root-privkey" placeholder="秘密鍵を入力 or 空欄" value="" />
         </div>
+        <div class="form-group">
+          <label class="toggle-label">
+            <input type="checkbox" id="toggle-selfsigned" ${state.selfSigned ? "checked" : ""} />
+            <span class="toggle-switch"></span>
+            自己署名ルートCA（trust store 不要）
+          </label>
+          <p class="toggle-desc">ONにすると、この証明書チェーンを検証する際にtrust storeへの登録が不要になります。</p>
+        </div>
         <div id="root-key-info" class="key-info" style="display:none"></div>
         <div id="root-error" class="error" style="display:none"></div>
         <div class="button-row">
@@ -389,7 +398,11 @@ function renderStep1(app) {
             $("btn-gen").style.display = "none";
             $("btn-next").style.display = "inline-flex";
         };
-        $("btn-next").onclick = () => { state.step = 2; render(); };
+        $("btn-next").onclick = () => {
+            state.selfSigned = $("toggle-selfsigned").checked;
+            state.step = 2;
+            render();
+        };
     }
     else {
         app.innerHTML = `
@@ -542,7 +555,7 @@ function renderStep2(app) {
                 City: state.city,
                 IssuedAt: nowISO()
             };
-            const entry = DYLA.createEntry(state.currentSignerName, order, domain, state.currentSignerKey, state.text);
+            const entry = DYLA.createEntry(state.currentSignerName, order, domain, state.currentSignerKey, state.text, state.mode === "new" && order === 0 ? state.selfSigned : false);
             const certEntries = [...state.chain, entry];
             const cert = new DYLA({ DYLA: certEntries });
             state.resultPEM = cert.toPEM();
@@ -654,6 +667,7 @@ function resetState() {
     state.city = "";
     state.isCA = false;
     state.text = "";
+    state.selfSigned = false;
     state.resultPEM = "";
     state.resultPrivateKey = "";
     state.resultPublicKey = "";
@@ -1046,6 +1060,59 @@ function injectStyles() {
 .status-ok { color: var(--accent); }
 .status-ng { color: var(--danger); }
 
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+  user-select: none;
+}
+
+.toggle-label input[type="checkbox"] {
+  display: none;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  background: var(--border);
+  border-radius: 11px;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toggle-label input[type="checkbox"]:checked + .toggle-switch {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+}
+
+.toggle-label input[type="checkbox"]:checked + .toggle-switch::after {
+  transform: translateX(18px);
+  background: var(--accent);
+}
+
+.toggle-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 6px 0 0;
+}
+
 .tag-expired {
   background: rgba(248, 113, 113, 0.2);
   color: var(--danger);
@@ -1054,8 +1121,9 @@ function injectStyles() {
 .tag-valid {
   background: rgba(74, 222, 128, 0.2);
   color: var(--accent);
+}                      // ← ここで .tag-valid を正しく閉じる
 
-  .verify-result {
+.verify-result {       // ← 独立したルールとして外に出す
   margin-top: 20px;
   padding: 16px;
   border-radius: 8px;
@@ -1069,7 +1137,6 @@ function injectStyles() {
 .verify-ng {
   background: rgba(248, 113, 113, 0.1);
   border: 1px solid var(--danger);
-}
 }
   `;
     document.head.appendChild(style);

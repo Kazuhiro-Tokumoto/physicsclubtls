@@ -58,6 +58,23 @@ export function issueSubCA(parentEntry, parentPrivateKey, chainEntries, cn, coun
         chain: [...chainEntries, result.entry]
     };
 }
+// ===== 自己署名ルートCA作成 =====
+export function issueRootCA(caName, cn, country, state, city, text = "") {
+    const keyPair = DYLA.generateKeyPair();
+    const domain = {
+        CN: cn,
+        IsCA: true,
+        Pubkey: keyPair.publicKey,
+        Country: country,
+        State: state,
+        City: city,
+        IssuedAt: nowISO()
+    };
+    // 自己署名: 自分の秘密鍵で署名し、SelfSigned: true を付与
+    const entry = DYLA.createEntry(caName, 0, domain, keyPair.privateKey, text, true);
+    const cert = new DYLA({ DYLA: [entry] });
+    return { cert, keyPair };
+}
 // ===== PEMインポートからの発行 =====
 // 既存のDYLA PEM証明書をインポートし、CA秘密鍵で新しい証明書を発行
 export function issueFromPEM(pem, caPrivateKey, cn, isCA, country, state, city, text = "") {

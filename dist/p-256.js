@@ -159,7 +159,7 @@ export class p_256 {
         return left === right;
     }
     bigintToHex(n) {
-        return n.toString(16).toUpperCase().padStart(64, "0");
+        return n.toString(16).padStart(64, "0");
     }
     hexToBigInt(hex) {
         return BigInt("0x" + hex);
@@ -238,15 +238,26 @@ export class p_256 {
         return this.bigintToHex(r) + this.bigintToHex(s);
     }
     verify(message, signature, publicKey) {
-        const uncompressed = publicKey.length === 66 ? this.decompressPublicKey(publicKey) : publicKey;
+        let uncompressed;
+        if (publicKey.length === 66) {
+            uncompressed = this.decompressPublicKey(publicKey);
+        }
+        else if (publicKey.length === 130 && publicKey.startsWith("04")) {
+            uncompressed = publicKey.slice(2);
+        }
+        else {
+            uncompressed = publicKey;
+        }
         if (this.isPointOnCurve([
             this.hexToBigInt(uncompressed.slice(0, 64)),
             this.hexToBigInt(uncompressed.slice(64, 128)),
         ]) === false) {
             throw new Error("無効な公開鍵: 曲線上にありません");
         }
-        const r = this.hexToBigInt(signature.slice(0, 64));
-        const s = this.hexToBigInt(signature.slice(64, 128));
+        const rHex = signature.slice(0, 64).padStart(64, "0");
+        const sHex = signature.slice(64, 128).padStart(64, "0");
+        const r = this.hexToBigInt(rHex);
+        const s = this.hexToBigInt(sHex);
         if (r <= 0n || r >= this.N || s <= 0n || s >= this.N)
             return false;
         const w = this.inv(s, this.N);
@@ -266,7 +277,7 @@ export class p_256 {
         const uncompressed = this.bigintToHex(pubPoint[0]) + this.bigintToHex(pubPoint[1]);
         return {
             privateKey: this.bigintToHex(privateKey),
-            publicKey: this.compressPublicKey(uncompressed),
+            publicKey: "04" + uncompressed,
         };
     }
     BigintToBytes(n) {
@@ -379,9 +390,16 @@ export class p_256 {
         const privKey = this.hexToBigInt(privateKeyHex);
         if (privKey <= 0n || privKey >= this.N)
             throw new Error("無効な秘密鍵");
-        const uncompressed = peerPublicKeyHex.length === 66
-            ? this.decompressPublicKey(peerPublicKeyHex)
-            : peerPublicKeyHex;
+        let uncompressed;
+        if (peerPublicKeyHex.length === 66) {
+            uncompressed = this.decompressPublicKey(peerPublicKeyHex);
+        }
+        else if (peerPublicKeyHex.length === 130 && peerPublicKeyHex.startsWith("04")) {
+            uncompressed = peerPublicKeyHex.slice(2);
+        }
+        else {
+            uncompressed = peerPublicKeyHex;
+        }
         const peerX = this.hexToBigInt(uncompressed.slice(0, 64));
         const peerY = this.hexToBigInt(uncompressed.slice(64, 128));
         if (!this.isPointOnCurve([peerX, peerY])) {

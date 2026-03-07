@@ -1164,8 +1164,9 @@ function injectStyles(): void {
 .tag-valid {
   background: rgba(74, 222, 128, 0.2);
   color: var(--accent);
+}                      // ← ここで .tag-valid を正しく閉じる
 
-  .verify-result {
+.verify-result {       // ← 独立したルールとして外に出す
   margin-top: 20px;
   padding: 16px;
   border-radius: 8px;
@@ -1179,7 +1180,6 @@ function injectStyles(): void {
 .verify-ng {
   background: rgba(248, 113, 113, 0.1);
   border: 1px solid var(--danger);
-}
 }
   `;
   document.head.appendChild(style);

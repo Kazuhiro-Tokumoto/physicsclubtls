@@ -75,6 +75,9 @@ export class DYLA {
             if (typeof entry.Text !== "string") {
                 throw new Error(`${prefix}: Text must be a string`);
             }
+            if (entry.SelfSigned === true && entry.Order !== 0) {
+                throw new Error(`${prefix}: SelfSigned can only be true for Order 0`);
+            }
             if (typeof entry.Domain !== "object" || entry.Domain === null) {
                 throw new Error(`${prefix}: Domain must be an object`);
             }
@@ -131,13 +134,16 @@ export class DYLA {
         return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
     }
     // ===== 署名生成 (仕様 Section 6.1) =====
-    // Sig = ECDSA_P256_Sign(caPrivateKey, SHA-256(canonicalJSON(Domain)))
+    // Sig = ECDSA_P256_Sign(caPrivateKey, canonicalJSON(Domain))
+    // ※ p-256.ts の sign() が内部で SHA-256 を適用するため、ここでは生データを渡す
     static signDomain(domain, caPrivateKey) {
         const data = new TextEncoder().encode(DYLA.canonicalJSON(domain));
         return DYLA.ec.sign(data, caPrivateKey); // hashしない
     }
     static verifyEntry(entry, caPubkey) {
         const data = new TextEncoder().encode(DYLA.canonicalJSON(entry.Domain));
+        // 04+X+Y (130文字) → slice(2) で X+Y (128文字) に正規化して verify へ渡す
+        // 圧縮鍵 (66文字) → そのまま渡す → verify 内で length===66 判定 → decompressPublicKey
         const key = caPubkey.startsWith("04") ? caPubkey.slice(2) : caPubkey;
         return DYLA.ec.verify(data, entry.Sig, key); // hashしない
     }
@@ -155,7 +161,7 @@ export class DYLA {
         return now.getTime() > issued.getTime() + maxMs;
     }
     // ===== エントリ作成ヘルパー =====
-    static createEntry(ca, order, domain, caPrivateKey, text = "") {
+    static createEntry(ca, order, domain, caPrivateKey, text = "", selfSigned = false) {
         const sig = DYLA.signDomain(domain, caPrivateKey);
         const partial = {
             CA: ca,
@@ -163,22 +169,22 @@ export class DYLA {
             Domain: domain,
             Sig: sig,
             Text: text,
-            Message: "Do you like apple?"
+            Message: "Do you like apple?",
+            ...(selfSigned ? { SelfSigned: true } : {})
         };
         const serial = DYLA.computeSerial(partial);
         return { ...partial, Serial: serial };
     }
     // ===== チェーン全体の検証 (仕様 Section 7) =====
-    static verifyChain(cert, trustStore, crl = [], expectedDomain, now = new Date(), selfSigned = false // ← 追加
-    ) {
+    static verifyChain(cert, trustStore, crl = [], expectedDomain, now = new Date()) {
         const entries = [...cert.DYLA].sort((a, b) => a.Order - b.Order);
         if (entries.length === 0) {
             return { valid: false, error: "Empty certificate chain" };
         }
         const root = entries[0];
         let rootPubkey;
-        if (selfSigned) {
-            // 自己署名: 自分のPubkeyで自分のSigを検証
+        if (root.SelfSigned === true) {
+            // 自己署名: エントリ自身のPubkeyで検証
             rootPubkey = root.Domain.Pubkey;
         }
         else {
@@ -249,7 +255,12 @@ export class DYLA {
     }
     // ===== 鍵ペア生成 (P-256) =====
     static generateKeyPair() {
-        return DYLA.ec.generateKeyPair();
+        const { privateKey } = DYLA.ec.generateKeyPair();
+        const { uncompressed } = DYLA.ec.privateKeyToPublicKey(privateKey);
+        return {
+            privateKey,
+            publicKey: "04" + uncompressed, // 非圧縮形式: 04 + X(64) + Y(64) = 130文字
+        };
     }
     // ===== ゲッター =====
     get entries() {
