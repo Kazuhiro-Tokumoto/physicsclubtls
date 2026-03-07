@@ -26,13 +26,11 @@ export class p_256 {
         let h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
         const len = data.length;
         const bitLen = len * 8;
-        // ★ここを正しく修正★
         const blockCount = Math.ceil((len + 9) / 64);
         const blocks = new Uint8Array(blockCount * 64);
         blocks.set(data);
         blocks[len] = 0x80;
         const view = new DataView(blocks.buffer);
-        // ビット長（big-endian）
         view.setUint32(blocks.length - 8, Math.floor(bitLen / 0x100000000), false);
         view.setUint32(blocks.length - 4, bitLen >>> 0, false);
         for (let i = 0; i < blocks.length; i += 64) {
@@ -43,16 +41,19 @@ export class p_256 {
             for (let t = 16; t < 64; t++) {
                 const s0 = rotr(W[t - 15], 7) ^ rotr(W[t - 15], 18) ^ (W[t - 15] >>> 3);
                 const s1 = rotr(W[t - 2], 17) ^ rotr(W[t - 2], 19) ^ (W[t - 2] >>> 10);
-                W[t] = (((W[t - 16] + s0) | 0) + ((W[t - 7] + s1) | 0)) >>> 0;
+                // ✅ 修正: | 0 を途中に挟まず >>> 0 で締める
+                W[t] = (W[t - 16] + s0 + W[t - 7] + s1) >>> 0;
             }
-            let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+            let a = h0, b = h1, c = h2, d = h3;
+            let e = h4, f = h5, g = h6, h = h7;
             for (let t = 0; t < 64; t++) {
                 const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
                 const ch = (e & f) ^ (~e & g);
-                const temp1 = (((h + S1) | 0) + (ch | 0) + (K[t] | 0) + (W[t] | 0)) >>> 0;
+                // ✅ 修正: | 0 を途中に挟まない
+                const temp1 = (h + S1 + ch + K[t] + W[t]) >>> 0;
                 const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
                 const maj = (a & b) ^ (a & c) ^ (b & c);
-                const temp2 = ((S0 + maj) | 0) >>> 0;
+                const temp2 = (S0 + maj) >>> 0;
                 h = g;
                 g = f;
                 f = e;
@@ -72,15 +73,15 @@ export class p_256 {
             h7 = (h7 + h) >>> 0;
         }
         const result = new Uint8Array(32);
-        const resultView = new DataView(result.buffer);
-        resultView.setUint32(0, h0, false);
-        resultView.setUint32(4, h1, false);
-        resultView.setUint32(8, h2, false);
-        resultView.setUint32(12, h3, false);
-        resultView.setUint32(16, h4, false);
-        resultView.setUint32(20, h5, false);
-        resultView.setUint32(24, h6, false);
-        resultView.setUint32(28, h7, false);
+        const rv = new DataView(result.buffer);
+        rv.setUint32(0, h0, false);
+        rv.setUint32(4, h1, false);
+        rv.setUint32(8, h2, false);
+        rv.setUint32(12, h3, false);
+        rv.setUint32(16, h4, false);
+        rv.setUint32(20, h5, false);
+        rv.setUint32(24, h6, false);
+        rv.setUint32(28, h7, false);
         return result;
     }
     mod25519(x) {

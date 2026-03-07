@@ -1,13 +1,3 @@
-// ecsh_optimized.ts — P-256 EC-Schnorr 極限最適化版
-//
-// 検証済み改善一覧 (Node.js実測):
-//   addPointsJacobian : mod 5回削減 → 単体 64ms→25ms (-61%)
-//   shamirsMult Q側   : w=4 → w=5   → 1.80ms→1.32ms/op (-27%)
-//   isPointOnCurve    : x**3n → x*x%P*x、a=-3利用 → 128ms→34ms/10万回 (-74%)
-//   hmacSha256        : map() → for ループ
-//   generateK         : spread演算子 → concat()
-//
-// 予測 verify: ~2.73ms → ~2.0ms
 export class ecsh {
     P = 0xffffffff00000001000000000000000000000000ffffffffffffffffffffffffn;
     a = 0xffffffff00000001000000000000000000000000fffffffffffffffffffffffcn; // = P-3
@@ -190,35 +180,44 @@ export class ecsh {
         const rotr = (x, n) => (x >>> n) | (x << (32 - n));
         let h0 = 0x6a09e667, h1 = 0xbb67ae85, h2 = 0x3c6ef372, h3 = 0xa54ff53a;
         let h4 = 0x510e527f, h5 = 0x9b05688c, h6 = 0x1f83d9ab, h7 = 0x5be0cd19;
-        const len = data.length, bitLen = len * 8;
-        const blocks = new Uint8Array(Math.ceil((len + 9) / 64) * 64);
+        const len = data.length;
+        const bitLen = len * 8;
+        const blockCount = Math.ceil((len + 9) / 64);
+        const blocks = new Uint8Array(blockCount * 64);
         blocks.set(data);
         blocks[len] = 0x80;
-        const dv = new DataView(blocks.buffer);
-        dv.setUint32(blocks.length - 8, Math.floor(bitLen / 0x100000000), false);
-        dv.setUint32(blocks.length - 4, bitLen >>> 0, false);
+        const view = new DataView(blocks.buffer);
+        view.setUint32(blocks.length - 8, Math.floor(bitLen / 0x100000000), false);
+        view.setUint32(blocks.length - 4, bitLen >>> 0, false);
         for (let i = 0; i < blocks.length; i += 64) {
             const W = new Uint32Array(64);
-            for (let t = 0; t < 16; t++)
-                W[t] = dv.getUint32(i + t * 4, false);
+            for (let t = 0; t < 16; t++) {
+                W[t] = view.getUint32(i + t * 4, false);
+            }
             for (let t = 16; t < 64; t++) {
                 const s0 = rotr(W[t - 15], 7) ^ rotr(W[t - 15], 18) ^ (W[t - 15] >>> 3);
                 const s1 = rotr(W[t - 2], 17) ^ rotr(W[t - 2], 19) ^ (W[t - 2] >>> 10);
-                W[t] = (((W[t - 16] + s0) | 0) + ((W[t - 7] + s1) | 0)) >>> 0;
+                // ✅ 修正: | 0 を途中に挟まず >>> 0 で締める
+                W[t] = (W[t - 16] + s0 + W[t - 7] + s1) >>> 0;
             }
-            let a = h0, b = h1, c = h2, d = h3, e = h4, f = h5, g = h6, h = h7;
+            let a = h0, b = h1, c = h2, d = h3;
+            let e = h4, f = h5, g = h6, h = h7;
             for (let t = 0; t < 64; t++) {
-                const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25), ch = (e & f) ^ (~e & g);
-                const t1 = (((h + S1) | 0) + (ch | 0) + (K[t] | 0) + (W[t] | 0)) >>> 0;
-                const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22), maj = (a & b) ^ (a & c) ^ (b & c);
+                const S1 = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
+                const ch = (e & f) ^ (~e & g);
+                // ✅ 修正: | 0 を途中に挟まない
+                const temp1 = (h + S1 + ch + K[t] + W[t]) >>> 0;
+                const S0 = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
+                const maj = (a & b) ^ (a & c) ^ (b & c);
+                const temp2 = (S0 + maj) >>> 0;
                 h = g;
                 g = f;
                 f = e;
-                e = (d + t1) >>> 0;
+                e = (d + temp1) >>> 0;
                 d = c;
                 c = b;
                 b = a;
-                a = (t1 + ((S0 + maj) | 0)) >>> 0;
+                a = (temp1 + temp2) >>> 0;
             }
             h0 = (h0 + a) >>> 0;
             h1 = (h1 + b) >>> 0;
@@ -229,16 +228,17 @@ export class ecsh {
             h6 = (h6 + g) >>> 0;
             h7 = (h7 + h) >>> 0;
         }
-        const out = new Uint8Array(32), ov = new DataView(out.buffer);
-        ov.setUint32(0, h0, false);
-        ov.setUint32(4, h1, false);
-        ov.setUint32(8, h2, false);
-        ov.setUint32(12, h3, false);
-        ov.setUint32(16, h4, false);
-        ov.setUint32(20, h5, false);
-        ov.setUint32(24, h6, false);
-        ov.setUint32(28, h7, false);
-        return out;
+        const result = new Uint8Array(32);
+        const rv = new DataView(result.buffer);
+        rv.setUint32(0, h0, false);
+        rv.setUint32(4, h1, false);
+        rv.setUint32(8, h2, false);
+        rv.setUint32(12, h3, false);
+        rv.setUint32(16, h4, false);
+        rv.setUint32(20, h5, false);
+        rv.setUint32(24, h6, false);
+        rv.setUint32(28, h7, false);
+        return result;
     }
     // ─── HMAC-SHA256 ─────────────────────────────────────────────────────────
     // ★ map() → for ループ (コールバック生成コスト削減)
