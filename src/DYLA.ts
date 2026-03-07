@@ -198,7 +198,8 @@ verifyForDomain(
   }
 
   // ===== 署名生成 (仕様 Section 6.1) =====
-  // Sig = ECDSA_P256_Sign(caPrivateKey, SHA-256(canonicalJSON(Domain)))
+  // Sig = ECDSA_P256_Sign(caPrivateKey, canonicalJSON(Domain))
+  // ※ p-256.ts の sign() が内部で SHA-256 を適用するため、ここでは生データを渡す
 
 static signDomain(domain: DYLADomain, caPrivateKey: string): string {
   const data = new TextEncoder().encode(DYLA.canonicalJSON(domain));
@@ -207,6 +208,8 @@ static signDomain(domain: DYLADomain, caPrivateKey: string): string {
 
 static verifyEntry(entry: DYLAEntry, caPubkey: string): boolean {
   const data = new TextEncoder().encode(DYLA.canonicalJSON(entry.Domain));
+  // 04+X+Y (130文字) → slice(2) で X+Y (128文字) に正規化して verify へ渡す
+  // 圧縮鍵 (66文字) → そのまま渡す → verify 内で length===66 判定 → decompressPublicKey
   const key = caPubkey.startsWith("04") ? caPubkey.slice(2) : caPubkey;
   return DYLA.ec.verify(data, entry.Sig, key);  // hashしない
 }
@@ -357,7 +360,12 @@ static createCRL(
   // ===== 鍵ペア生成 (P-256) =====
 
   static generateKeyPair(): { privateKey: string; publicKey: string } {
-    return DYLA.ec.generateKeyPair();
+    const { privateKey } = DYLA.ec.generateKeyPair();
+    const { uncompressed } = DYLA.ec.privateKeyToPublicKey(privateKey);
+    return {
+      privateKey,
+      publicKey: "04" + uncompressed,  // 非圧縮形式: 04 + X(64) + Y(64) = 130文字
+    };
   }
 
   // ===== ゲッター =====
