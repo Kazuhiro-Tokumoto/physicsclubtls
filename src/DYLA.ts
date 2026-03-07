@@ -200,20 +200,15 @@ verifyForDomain(
   // ===== 署名生成 (仕様 Section 6.1) =====
   // Sig = ECDSA_P256_Sign(caPrivateKey, SHA-256(canonicalJSON(Domain)))
 
-  static signDomain(domain: DYLADomain, caPrivateKey: string): string {
-    const data = new TextEncoder().encode(DYLA.canonicalJSON(domain));
-    const hash = DYLA.ec.sha256(data);
-    return DYLA.ec.sign(hash, caPrivateKey);
-  }
-
-  // ===== 署名検証 =====
+static signDomain(domain: DYLADomain, caPrivateKey: string): string {
+  const data = new TextEncoder().encode(DYLA.canonicalJSON(domain));
+  return DYLA.ec.sign(data, caPrivateKey);  // hashしない
+}
 
 static verifyEntry(entry: DYLAEntry, caPubkey: string): boolean {
   const data = new TextEncoder().encode(DYLA.canonicalJSON(entry.Domain));
-  const hash = DYLA.ec.sha256(data);
-  // 04始まりなら除去してXYのみにする
   const key = caPubkey.startsWith("04") ? caPubkey.slice(2) : caPubkey;
-  return DYLA.ec.verify(hash, entry.Sig, key);
+  return DYLA.ec.verify(data, entry.Sig, key);  // hashしない
 }
 
   // ===== Serial検証 =====

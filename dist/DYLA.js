@@ -134,16 +134,12 @@ export class DYLA {
     // Sig = ECDSA_P256_Sign(caPrivateKey, SHA-256(canonicalJSON(Domain)))
     static signDomain(domain, caPrivateKey) {
         const data = new TextEncoder().encode(DYLA.canonicalJSON(domain));
-        const hash = DYLA.ec.sha256(data);
-        return DYLA.ec.sign(hash, caPrivateKey);
+        return DYLA.ec.sign(data, caPrivateKey); // hashしない
     }
-    // ===== 署名検証 =====
     static verifyEntry(entry, caPubkey) {
         const data = new TextEncoder().encode(DYLA.canonicalJSON(entry.Domain));
-        const hash = DYLA.ec.sha256(data);
-        // 04始まりなら除去してXYのみにする
         const key = caPubkey.startsWith("04") ? caPubkey.slice(2) : caPubkey;
-        return DYLA.ec.verify(hash, entry.Sig, key);
+        return DYLA.ec.verify(data, entry.Sig, key); // hashしない
     }
     // ===== Serial検証 =====
     static verifySerial(entry) {
