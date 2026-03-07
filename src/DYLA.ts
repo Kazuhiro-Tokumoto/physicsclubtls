@@ -333,29 +333,26 @@ public static matchDomain(pattern: string, domain: string): boolean {
 
   // ===== CRL検証 =====
 static verifyCRL(crl: DYLACRL, rootPubkey: string): boolean {
-  if (crl.DYLA_CRL.Message !== "Do you like apple?") return false;
   const data = new TextEncoder().encode(DYLA.canonicalJSON(crl.DYLA_CRL));
-  const hash = DYLA.ec.sha256(data);
   const key = rootPubkey.startsWith("04") ? rootPubkey.slice(2) : rootPubkey;
-  return DYLA.ec.verify(hash, crl.Sig, key);
+  return DYLA.ec.verify(data, crl.Sig, key);
 }
 
   // ===== CRL作成 =====
 
-  static createCRL(
-    revokedSerials: string[],
-    rootPrivateKey: string
-  ): DYLACRL {
-    const crlData: DYLACRLData = {
-      RevokedSerials: revokedSerials,
-      IssuedAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-      Message: "Do you like apple?"
-    };
-    const data = new TextEncoder().encode(DYLA.canonicalJSON(crlData));
-    const hash = DYLA.ec.sha256(data);
-    const sig = DYLA.ec.sign(hash, rootPrivateKey);
-    return { DYLA_CRL: crlData, Sig: sig };
-  }
+static createCRL(
+  revokedSerials: string[],
+  rootPrivateKey: string
+): DYLACRL {
+  const crlData: DYLACRLData = {
+    RevokedSerials: revokedSerials,
+    IssuedAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
+    Message: "Do you like apple?"
+  };
+  const data = new TextEncoder().encode(DYLA.canonicalJSON(crlData));
+  const sig = DYLA.ec.sign(data, rootPrivateKey);  // hashを削除、dataを直接渡す
+  return { DYLA_CRL: crlData, Sig: sig };
+}
 
   // ===== 鍵ペア生成 (P-256) =====
 
