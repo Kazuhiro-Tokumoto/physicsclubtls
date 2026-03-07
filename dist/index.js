@@ -378,10 +378,7 @@ function renderStep1(app) {
                     state.rootKeyPair = { privateKey: privInput, publicKey: pub.compressed };
                 }
                 else {
-                    const kp = DYLA.generateKeyPair();
-                    // generateKeyPair()は非圧縮(04+XY)を返すが、UIでは圧縮形式で扱う
-                    const pub = ec.privateKeyToPublicKey(kp.privateKey);
-                    state.rootKeyPair = { privateKey: kp.privateKey, publicKey: pub.compressed };
+                    state.rootKeyPair = DYLA.generateKeyPair();
                 }
             }
             catch (e) {
@@ -543,22 +540,9 @@ function renderStep2(app) {
                     return;
                 }
             }
-            else if (state.mode === "new" && state.chain.length === 0 && state.selfSigned) {
-                // 自己署名ルートCA: 署名者(=自分)の公開鍵をDomain.Pubkeyに設定
-                // state.rootKeyPairの公開鍵は圧縮形式(66文字)なので非圧縮に変換
-                const rootPub = state.rootKeyPair.publicKey;
-                if (rootPub.startsWith("04") && rootPub.length === 130) {
-                    pubkeyUncompressed = rootPub;
-                }
-                else {
-                    pubkeyUncompressed = "04" + ec.decompressPublicKey(rootPub);
-                }
-                resultPrivateKey = state.rootKeyPair.privateKey;
-            }
             else {
                 const keyPair = DYLA.generateKeyPair();
-                // generateKeyPair() は "04" + XY (130文字) を返すのでそのまま使用
-                pubkeyUncompressed = keyPair.publicKey;
+                pubkeyUncompressed = "04" + ec.decompressPublicKey(keyPair.publicKey);
                 resultPrivateKey = keyPair.privateKey;
             }
             const order = state.chain.length;
@@ -1139,20 +1123,20 @@ function injectStyles() {
   color: var(--accent);
 }                      // ← ここで .tag-valid を正しく閉じる
 
-.verify-result {       // ← 独立したルールとして外に出す
+.verify-result {
   margin-top: 20px;
   padding: 16px;
   border-radius: 8px;
 }
 
 .verify-ok {
-  background: rgba(74, 222, 128, 0.1);
-  border: 1px solid var(--accent);
+  background: rgba(74, 222, 128, 0.06);
+  border-left: 3px solid var(--accent);
 }
 
 .verify-ng {
-  background: rgba(248, 113, 113, 0.1);
-  border: 1px solid var(--danger);
+  background: rgba(248, 113, 113, 0.06);
+  border-left: 3px solid var(--danger);
 }
   `;
     document.head.appendChild(style);
