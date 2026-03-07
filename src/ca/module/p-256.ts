@@ -50,7 +50,6 @@ public sha256(data: Uint8Array): Uint8Array {
     for (let t = 16; t < 64; t++) {
       const s0 = rotr(W[t - 15], 7) ^ rotr(W[t - 15], 18) ^ (W[t - 15] >>> 3);
       const s1 = rotr(W[t - 2], 17) ^ rotr(W[t - 2], 19) ^ (W[t - 2] >>> 10);
-      // ✅ 修正: | 0 を途中に挟まず >>> 0 で締める
       W[t] = (W[t - 16] + s0 + W[t - 7] + s1) >>> 0;
     }
 
@@ -59,8 +58,7 @@ public sha256(data: Uint8Array): Uint8Array {
 
     for (let t = 0; t < 64; t++) {
       const S1  = rotr(e, 6) ^ rotr(e, 11) ^ rotr(e, 25);
-      const ch  = (e & f) ^ (~e & g);
-      // ✅ 修正: | 0 を途中に挟まない
+      const ch  = (e & f) ^ ((~e >>> 0) & g);  // ✅ ~e を明示的にuint32化
       const temp1 = (h + S1 + ch + K[t] + W[t]) >>> 0;
       const S0  = rotr(a, 2) ^ rotr(a, 13) ^ rotr(a, 22);
       const maj = (a & b) ^ (a & c) ^ (b & c);
