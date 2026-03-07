@@ -411,7 +411,10 @@ function renderStep1(app: HTMLElement): void {
           const pub = ec.privateKeyToPublicKey(privInput);
           state.rootKeyPair = { privateKey: privInput, publicKey: pub.compressed };
         } else {
-          state.rootKeyPair = DYLA.generateKeyPair();
+          const kp = DYLA.generateKeyPair();
+          // generateKeyPair()は非圧縮(04+XY)を返すが、UIでは圧縮形式で扱う
+          const pub = ec.privateKeyToPublicKey(kp.privateKey);
+          state.rootKeyPair = { privateKey: kp.privateKey, publicKey: pub.compressed };
         }
       } catch (e: any) {
         showError("root-error", "秘密鍵が無効です: " + e.message);
@@ -558,9 +561,20 @@ function renderStep2(app: HTMLElement): void {
           showError("issue-error", "公開鍵の形式が無効です (02/03で66文字 or 04で130文字)");
           return;
         }
+      } else if (state.mode === "new" && state.chain.length === 0 && state.selfSigned) {
+        // 自己署名ルートCA: 署名者(=自分)の公開鍵をDomain.Pubkeyに設定
+        // state.rootKeyPairの公開鍵は圧縮形式(66文字)なので非圧縮に変換
+        const rootPub = state.rootKeyPair!.publicKey;
+        if (rootPub.startsWith("04") && rootPub.length === 130) {
+          pubkeyUncompressed = rootPub;
+        } else {
+          pubkeyUncompressed = "04" + ec.decompressPublicKey(rootPub);
+        }
+        resultPrivateKey = state.rootKeyPair!.privateKey;
       } else {
         const keyPair = DYLA.generateKeyPair();
-        pubkeyUncompressed = "04" + ec.decompressPublicKey(keyPair.publicKey);
+        // generateKeyPair() は "04" + XY (130文字) を返すのでそのまま使用
+        pubkeyUncompressed = keyPair.publicKey;
         resultPrivateKey = keyPair.privateKey;
       }
 
