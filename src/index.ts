@@ -31,6 +31,7 @@ interface State {
   city: string;
   isCA: boolean;
   text: string;
+  selfSigned: boolean;
   // 結果
   resultPEM: string;
   resultPrivateKey: string;
@@ -55,6 +56,7 @@ const state: State = {
   city: "",
   isCA: false,
   text: "",
+  selfSigned: false,
   resultPEM: "",
   resultPrivateKey: "",
   resultPublicKey: "",
@@ -150,7 +152,7 @@ function renderSelfCheck(app: HTMLElement): void {
     try {
       const cert = DYLA.fromPEM(pem);
       const domain = ($("self-domain") as HTMLInputElement).value.trim() || undefined;
-      const result = DYLA.verifyChain(cert.raw, [], [], domain, new Date(), true);
+      const result = DYLA.verifyChain(cert.raw, [], [], domain, new Date());
 
       $("self-error").style.display = "none";
       const el = $("self-result");
@@ -380,6 +382,14 @@ function renderStep1(app: HTMLElement): void {
           <label>秘密鍵 (hex) — 空欄で自動生成</label>
           <input type="text" id="root-privkey" placeholder="秘密鍵を入力 or 空欄" value="" />
         </div>
+        <div class="form-group">
+          <label class="toggle-label">
+            <input type="checkbox" id="toggle-selfsigned" ${state.selfSigned ? "checked" : ""} />
+            <span class="toggle-switch"></span>
+            自己署名ルートCA（trust store 不要）
+          </label>
+          <p class="toggle-desc">ONにすると、この証明書チェーンを検証する際にtrust storeへの登録が不要になります。</p>
+        </div>
         <div id="root-key-info" class="key-info" style="display:none"></div>
         <div id="root-error" class="error" style="display:none"></div>
         <div class="button-row">
@@ -421,7 +431,11 @@ function renderStep1(app: HTMLElement): void {
       ($("btn-gen") as HTMLButtonElement).style.display = "none";
       ($("btn-next") as HTMLButtonElement).style.display = "inline-flex";
     };
-    $("btn-next")!.onclick = () => { state.step = 2; render(); };
+    $("btn-next")!.onclick = () => {
+      state.selfSigned = ($("toggle-selfsigned") as HTMLInputElement).checked;
+      state.step = 2;
+      render();
+    };
   } else {
     app.innerHTML = `
       <div class="card">
@@ -567,7 +581,8 @@ function renderStep2(app: HTMLElement): void {
         order,
         domain,
         state.currentSignerKey,
-        state.text
+        state.text,
+        state.mode === "new" && order === 0 ? state.selfSigned : false
       );
 
       const certEntries = [...state.chain, entry];
@@ -693,6 +708,7 @@ function resetState(): void {
   state.city = "";
   state.isCA = false;
   state.text = "";
+  state.selfSigned = false;
   state.resultPEM = "";
   state.resultPrivateKey = "";
   state.resultPublicKey = "";
@@ -1086,6 +1102,59 @@ function injectStyles(): void {
 
 .status-ok { color: var(--accent); }
 .status-ng { color: var(--danger); }
+
+.toggle-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--text);
+  user-select: none;
+}
+
+.toggle-label input[type="checkbox"] {
+  display: none;
+}
+
+.toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 40px;
+  height: 22px;
+  background: var(--border);
+  border-radius: 11px;
+  flex-shrink: 0;
+  transition: background 0.2s;
+}
+
+.toggle-switch::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 16px;
+  height: 16px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  transition: transform 0.2s, background 0.2s;
+}
+
+.toggle-label input[type="checkbox"]:checked + .toggle-switch {
+  background: var(--accent-dim);
+  border: 1px solid var(--accent);
+}
+
+.toggle-label input[type="checkbox"]:checked + .toggle-switch::after {
+  transform: translateX(18px);
+  background: var(--accent);
+}
+
+.toggle-desc {
+  font-size: 12px;
+  color: var(--text-dim);
+  margin: 6px 0 0;
+}
 
 .tag-expired {
   background: rgba(248, 113, 113, 0.2);

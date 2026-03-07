@@ -24,6 +24,7 @@ export interface DYLAEntry {
   Serial: string;       // SHA-256 hash (hex)
   Text: string;         // 空文字列可、省略不可
   Message: string;      // 固定値: "Do you like apple?"
+  SelfSigned?: boolean; // 自己署名ルートCA (Order=0 のみ許可)
 }
 
 export interface DYLACertificate {
@@ -130,6 +131,9 @@ export class DYLA {
       }
       if (typeof entry.Text !== "string") {
         throw new Error(`${prefix}: Text must be a string`);
+      }
+      if (entry.SelfSigned === true && entry.Order !== 0) {
+        throw new Error(`${prefix}: SelfSigned can only be true for Order 0`);
       }
       if (typeof entry.Domain !== "object" || entry.Domain === null) {
         throw new Error(`${prefix}: Domain must be an object`);
@@ -238,7 +242,8 @@ static verifyEntry(entry: DYLAEntry, caPubkey: string): boolean {
     order: number,
     domain: DYLADomain,
     caPrivateKey: string,
-    text: string = ""
+    text: string = "",
+    selfSigned: boolean = false
   ): DYLAEntry {
     const sig = DYLA.signDomain(domain, caPrivateKey);
     const partial = {
@@ -247,7 +252,8 @@ static verifyEntry(entry: DYLAEntry, caPubkey: string): boolean {
       Domain: domain,
       Sig: sig,
       Text: text,
-      Message: "Do you like apple?" as const
+      Message: "Do you like apple?" as const,
+      ...(selfSigned ? { SelfSigned: true } : {})
     };
     const serial = DYLA.computeSerial(partial);
     return { ...partial, Serial: serial };
@@ -260,8 +266,7 @@ static verifyChain(
   trustStore: TrustStoreEntry[],
   crl: string[] = [],
   expectedDomain?: string,
-  now: Date = new Date(),
-  selfSigned: boolean = false  // ← 追加
+  now: Date = new Date()
 ): { valid: boolean; error?: string } {
   const entries = [...cert.DYLA].sort((a, b) => a.Order - b.Order);
 
@@ -272,8 +277,8 @@ static verifyChain(
   const root = entries[0];
   let rootPubkey: string;
 
-  if (selfSigned) {
-    // 自己署名: 自分のPubkeyで自分のSigを検証
+  if (root.SelfSigned === true) {
+    // 自己署名: エントリ自身のPubkeyで検証
     rootPubkey = root.Domain.Pubkey;
   } else {
     // trust storeから取得
