@@ -289,9 +289,10 @@ public sha256(data: Uint8Array): Uint8Array {
     ) {
       throw new Error("無効な公開鍵: 曲線上にありません");
     }
-    const half = signature.length / 2;
-    const r = this.hexToBigInt(signature.slice(0, half).padStart(64, "0"));
-    const s = this.hexToBigInt(signature.slice(half).padStart(64, "0"));
+    const rHex = signature.slice(0, 64).padStart(64, "0");
+    const sHex = signature.slice(64, 128).padStart(64, "0");
+    const r = this.hexToBigInt(rHex);
+    const s = this.hexToBigInt(sHex);
     if (r <= 0n || r >= this.N || s <= 0n || s >= this.N) return false;
     const w = this.inv(s, this.N);
     const u1 = (this.bytesToBigInt(this.sha256(message)) * w) % this.N;
@@ -312,7 +313,7 @@ public sha256(data: Uint8Array): Uint8Array {
       this.bigintToHex(pubPoint[0]) + this.bigintToHex(pubPoint[1]);
     return {
       privateKey: this.bigintToHex(privateKey),
-      publicKey: "04" + uncompressed,  // 非圧縮形式: 04 + X(64) + Y(64) = 130文字
+      publicKey: "04" + uncompressed,
     };
   }
 
