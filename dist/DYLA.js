@@ -220,6 +220,9 @@ export class DYLA {
                 return { valid: false, error: `Domain mismatch: ${lastCN} vs ${expectedDomain}` };
             }
         }
+        if (root.SelfSigned === true) {
+            alert("Warning: using self-signed root CA. Make sure you trust this certificate.");
+        }
         return { valid: true };
     }
     // ===== ワイルドカードドメインマッチング =====

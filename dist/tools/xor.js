@@ -198,7 +198,6 @@ export class cipher {
             throw new Error("鍵は32バイトにしてください");
         }
         const iv = globalThis.crypto.getRandomValues(new Uint8Array(16));
-        // 鍵を10000回ストレッチ
         const stretchedKey = this.stretch(key, iv);
         // HKDF で暗号化用とMAC用を独立して導出
         const encKey = this.hkdf(stretchedKey, iv, new TextEncoder().encode("enc"), 32);
@@ -224,7 +223,6 @@ export class cipher {
         const iv = encryptedWithIv.slice(0, 16);
         const mac = encryptedWithIv.slice(-32);
         const ciphertext = encryptedWithIv.slice(16, -32);
-        // 鍵を10000回ストレッチ
         const stretchedKey = this.stretch(key, iv);
         // HKDF で同じ鍵を再導出
         const encKey = this.hkdf(stretchedKey, iv, new TextEncoder().encode("enc"), 32);
