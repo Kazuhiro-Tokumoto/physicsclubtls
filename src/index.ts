@@ -411,7 +411,10 @@ function renderStep1(app: HTMLElement): void {
           const pub = ec.privateKeyToPublicKey(privInput);
           state.rootKeyPair = { privateKey: privInput, publicKey: pub.compressed };
         } else {
-          state.rootKeyPair = DYLA.generateKeyPair();
+          const raw = DYLA.generateKeyPair();
+          // generateKeyPairは "04"+uncompressed を返すので、compressedも作る
+          const compressed = ec.compressPublicKey(raw.publicKey.slice(2));
+          state.rootKeyPair = { privateKey: raw.privateKey, publicKey: compressed };
         }
       } catch (e: any) {
         showError("root-error", "秘密鍵が無効です: " + e.message);
@@ -549,7 +552,15 @@ function renderStep2(app: HTMLElement): void {
       let pubkeyUncompressed: string;
       let resultPrivateKey: string = "";
 
-      if (pubInput) {
+      const order = state.chain.length;
+      const isSelfSignedRoot = state.mode === "new" && order === 0 && state.selfSigned;
+
+      if (isSelfSignedRoot) {
+        // 自己署名ルートCA: 署名鍵(rootKeyPair)の公開鍵をエントリに入れる
+        // でないと署名した鍵とPubkeyが不一致になる
+        pubkeyUncompressed = "04" + ec.decompressPublicKey(state.rootKeyPair!.publicKey);
+        resultPrivateKey = state.rootKeyPair!.privateKey;
+      } else if (pubInput) {
         if (pubInput.startsWith("04") && pubInput.length === 130) {
           pubkeyUncompressed = pubInput;
         } else if ((pubInput.startsWith("02") || pubInput.startsWith("03")) && pubInput.length === 66) {
@@ -560,11 +571,9 @@ function renderStep2(app: HTMLElement): void {
         }
       } else {
         const keyPair = DYLA.generateKeyPair();
-        pubkeyUncompressed = "04" + ec.decompressPublicKey(keyPair.publicKey);
+        pubkeyUncompressed = keyPair.publicKey;  // すでに "04" + X + Y (130文字)
         resultPrivateKey = keyPair.privateKey;
       }
-
-      const order = state.chain.length;
 
       const domain: DYLADomain = {
         CN: state.cn,

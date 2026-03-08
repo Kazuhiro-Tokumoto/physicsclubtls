@@ -378,7 +378,10 @@ function renderStep1(app) {
                     state.rootKeyPair = { privateKey: privInput, publicKey: pub.compressed };
                 }
                 else {
-                    state.rootKeyPair = DYLA.generateKeyPair();
+                    const raw = DYLA.generateKeyPair();
+                    // generateKeyPairは "04"+uncompressed を返すので、compressedも作る
+                    const compressed = ec.compressPublicKey(raw.publicKey.slice(2));
+                    state.rootKeyPair = { privateKey: raw.privateKey, publicKey: compressed };
                 }
             }
             catch (e) {
@@ -528,7 +531,15 @@ function renderStep2(app) {
             const pubInput = $("cert-pubkey").value.trim();
             let pubkeyUncompressed;
             let resultPrivateKey = "";
-            if (pubInput) {
+            const order = state.chain.length;
+            const isSelfSignedRoot = state.mode === "new" && order === 0 && state.selfSigned;
+            if (isSelfSignedRoot) {
+                // 自己署名ルートCA: 署名鍵(rootKeyPair)の公開鍵をエントリに入れる
+                // でないと署名した鍵とPubkeyが不一致になる
+                pubkeyUncompressed = "04" + ec.decompressPublicKey(state.rootKeyPair.publicKey);
+                resultPrivateKey = state.rootKeyPair.privateKey;
+            }
+            else if (pubInput) {
                 if (pubInput.startsWith("04") && pubInput.length === 130) {
                     pubkeyUncompressed = pubInput;
                 }
@@ -542,10 +553,9 @@ function renderStep2(app) {
             }
             else {
                 const keyPair = DYLA.generateKeyPair();
-                pubkeyUncompressed = "04" + ec.decompressPublicKey(keyPair.publicKey);
+                pubkeyUncompressed = keyPair.publicKey; // すでに "04" + X + Y (130文字)
                 resultPrivateKey = keyPair.privateKey;
             }
-            const order = state.chain.length;
             const domain = {
                 CN: state.cn,
                 IsCA: state.isCA,

@@ -163,7 +163,7 @@ verifyForDomain(
   crl: string[] = [],
   now: Date = new Date()
 ): { valid: boolean; cn?: string; matched?: boolean; error?: string } {
-  // チェーン検証 — this.cert.rawを渡す
+  // チェーン検証
   const result = DYLA.verifyChain(this.cert, trustStore, crl, undefined, now);
   if (!result.valid) {
     return { valid: false, error: result.error };
@@ -171,7 +171,12 @@ verifyForDomain(
 
   const lastEntry = this.endEntity;
   if (!lastEntry) return { valid: false, error: "No end-entity entry" };
-  if (lastEntry.Domain.IsCA) return { valid: false, error: "Last entry is CA, not end-entity" };
+
+  // 自己署名ルートCA1枚だけのチェーンは、CAがエンドエンティティを兼ねる
+  const isSelfSignedOnly = lastEntry.SelfSigned === true && this.chainLength === 1;
+  if (lastEntry.Domain.IsCA && !isSelfSignedOnly) {
+    return { valid: false, error: "Last entry is CA, not end-entity" };
+  }
 
   const cn = lastEntry.Domain.CN;
   const matched = DYLA.matchDomain(cn, domain);
@@ -214,7 +219,9 @@ static verifyEntry(entry: DYLAEntry, caPubkey: string): boolean {
   const data = new TextEncoder().encode(DYLA.canonicalJSON(entry.Domain));
   // 04+X+Y (130文字) → slice(2) で X+Y (128文字) に正規化して verify へ渡す
   // 圧縮鍵 (66文字) → そのまま渡す → verify 内で length===66 判定 → decompressPublicKey
-  const key = caPubkey.startsWith("04") ? caPubkey.slice(2) : caPubkey;
+  const key = (caPubkey.length === 130 && caPubkey.startsWith("04"))
+    ? caPubkey.slice(2)
+    : caPubkey;
   return DYLA.ec.verify(data, entry.Sig, key);  // hashしない
 }
 
@@ -229,6 +236,8 @@ static verifyEntry(entry: DYLAEntry, caPubkey: string): boolean {
 
   static isExpired(entry: DYLAEntry, now: Date = new Date()): boolean {
     const issued = new Date(entry.Domain.IssuedAt);
+    // 未来の発行日は無効
+    if (issued.getTime() > now.getTime()) return true;
     const maxMs = entry.Domain.IsCA
       ? 5 * 365.25 * 24 * 60 * 60 * 1000   // 5年
       : 90 * 24 * 60 * 60 * 1000;            // 90日
@@ -310,8 +319,14 @@ static verifyChain(
       return { valid: false, error: `DYLA[${i}]: serial mismatch` };
     }
 
-    if (entry.Domain.IsCA && crl.includes(entry.Serial.toLowerCase())) {
+    // CA・エンドエンティティ両方のCRLチェック
+    if (crl.includes(entry.Serial.toLowerCase())) {
       return { valid: false, error: `DYLA[${i}]: certificate revoked` };
+    }
+
+    // 中間エントリ (最後以外) は IsCA: true でなければならない
+    if (i < entries.length - 1 && !entry.Domain.IsCA) {
+      return { valid: false, error: `DYLA[${i}]: intermediate entry must be CA (IsCA: true)` };
     }
   }
 
@@ -322,7 +337,7 @@ static verifyChain(
     }
   }
   if (root.SelfSigned === true) {
-    alert("Warning: using self-signed root CA. Make sure you trust this certificate.");
+    console.warn("Warning: using self-signed root CA. Make sure you trust this certificate.");
   }
   return { valid: true };
 }
@@ -344,7 +359,9 @@ public static matchDomain(pattern: string, domain: string): boolean {
   // ===== CRL検証 =====
 static verifyCRL(crl: DYLACRL, rootPubkey: string): boolean {
   const data = new TextEncoder().encode(DYLA.canonicalJSON(crl.DYLA_CRL));
-  const key = rootPubkey.startsWith("04") ? rootPubkey.slice(2) : rootPubkey;
+  const key = (rootPubkey.length === 130 && rootPubkey.startsWith("04"))
+    ? rootPubkey.slice(2)
+    : rootPubkey;
   return DYLA.ec.verify(data, crl.Sig, key);
 }
 
