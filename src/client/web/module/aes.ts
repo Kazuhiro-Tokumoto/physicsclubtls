@@ -1,15 +1,17 @@
 export class AES {
   // 環境に合わせて crypto を取得
   private get crypto() {
-    if (typeof window !== 'undefined' && window.crypto) {
+    if (typeof window !== "undefined" && window.crypto) {
       return window.crypto;
     }
     // Node.js の WebCrypto を動的に読み込む（あるいは global.crypto を使用）
-    return (require('node:crypto').webcrypto) as Crypto;
+    return require("node:crypto").webcrypto as Crypto;
   }
 
-  public async encrypt(plaintext: Uint8Array, keyBuffer: Uint8Array): Promise<string> {
-
+  public async encrypt(
+    plaintext: Uint8Array,
+    keyBuffer: Uint8Array,
+  ): Promise<string> {
     const cryptoKey = await this.crypto.subtle.importKey(
       "raw",
       keyBuffer as Uint8Array<ArrayBuffer>,
@@ -31,22 +33,26 @@ export class AES {
     result.set(new Uint8Array(encrypted), iv.length);
 
     // Node.js/ブラウザ両対応の Base64 変換
-    if (typeof btoa === 'function') {
+    if (typeof btoa === "function") {
       return btoa(String.fromCharCode(...result));
     } else {
-      return Buffer.from(result).toString('base64');
+      return Buffer.from(result).toString("base64");
     }
   }
 
-  public async decrypt(base64Cipher: string, keyBuffer: Uint8Array): Promise<Uint8Array<ArrayBuffer>> {
+  public async decrypt(
+    base64Cipher: string,
+    keyBuffer: Uint8Array,
+  ): Promise<Uint8Array<ArrayBuffer>> {
     // Node.js/ブラウザ両対応のバイナリ復元
     let packet: Uint8Array;
-    if (typeof atob === 'function') {
+    if (typeof atob === "function") {
       const binaryStr = atob(base64Cipher);
       packet = new Uint8Array(binaryStr.length);
-      for (let i = 0; i < binaryStr.length; i++) packet[i] = binaryStr.charCodeAt(i);
+      for (let i = 0; i < binaryStr.length; i++)
+        packet[i] = binaryStr.charCodeAt(i);
     } else {
-      packet = new Uint8Array(Buffer.from(base64Cipher, 'base64'));
+      packet = new Uint8Array(Buffer.from(base64Cipher, "base64"));
     }
 
     const cryptoKey = await this.crypto.subtle.importKey(

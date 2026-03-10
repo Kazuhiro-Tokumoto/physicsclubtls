@@ -27,7 +27,7 @@ const test = async () => {
 const rootkey = [
     "030FB3C4DA03E4E495C56368E3C55F7846A295E1C6DA14954F8379C82586135B08",
     "02D14FC65E11D39903C95371BEDDE5556555BDF28FA66648A4B8630B2E327A6A11",
-    "0305EE86431958420A4003E680A94427CD4654514477331A8566F0C055ADB2482C"
+    "0305EE86431958420A4003E680A94427CD4654514477331A8566F0C055ADB2482C",
 ];
 const test2 = async () => {
     const p256 = new p_256();
@@ -43,14 +43,14 @@ const test2 = async () => {
     }
 };
 function canonicalJSON(obj) {
-    if (typeof obj !== 'object' || obj === null)
+    if (typeof obj !== "object" || obj === null)
         return JSON.stringify(obj);
     if (Array.isArray(obj))
-        return '[' + obj.map(canonicalJSON).join(',') + ']';
+        return "[" + obj.map(canonicalJSON).join(",") + "]";
     const record = obj;
     const keys = Object.keys(record).sort();
-    const pairs = keys.map(k => `${JSON.stringify(k)}:${canonicalJSON(record[k])}`);
-    return '{' + pairs.join(',') + '}';
+    const pairs = keys.map((k) => `${JSON.stringify(k)}:${canonicalJSON(record[k])}`);
+    return "{" + pairs.join(",") + "}";
 }
 // チェーンが正しいかだけ
 const verifyCertificate = (cert) => {
@@ -129,42 +129,42 @@ const test4 = async () => {
     const rootSign = p256test.sign(encoder.encode(caKP.publicKey), rootKP.privateKey);
     // CAテスト: チェーンのみ
     const certCA = {
-        "root": [
+        root: [
             {
-                "keynumber": 0,
-                "sign": "CB4FB7C5DD2067E0E6C94029B72DF8ECC53C3F542C3C5CF3FF8B6273BA7B906F2CF83DDE96325BC926E78F16F9A194BC4EEA445BA2483254186F0FB9E9561DB8",
-                "nameca": "CA仮",
-                "CA": []
-            }
-        ]
+                keynumber: 0,
+                sign: "CB4FB7C5DD2067E0E6C94029B72DF8ECC53C3F542C3C5CF3FF8B6273BA7B906F2CF83DDE96325BC926E78F16F9A194BC4EEA445BA2483254186F0FB9E9561DB8",
+                nameca: "CA仮",
+                CA: [],
+            },
+        ],
     };
     const originalRootKey = rootkey[0];
     rootkey[0] = rootKP.publicKey;
     console.log("チェーン検証:", verifyCertificate(certCA), "← trueが正解");
     // Domainテスト: ドメイン名とチェーン
     const certDomain = {
-        "root": [
+        root: [
             {
-                "keynumber": 0,
-                "sign": "CB4FB7C5DD2067E0E6C94029B72DF8ECC53C3F542C3C5CF3FF8B6273BA7B906F2CF83DDE96325BC926E78F16F9A194BC4EEA445BA2483254186F0FB9E9561DB8",
-                "nameca": "CA仮",
-                "CA": [
+                keynumber: 0,
+                sign: "CB4FB7C5DD2067E0E6C94029B72DF8ECC53C3F542C3C5CF3FF8B6273BA7B906F2CF83DDE96325BC926E78F16F9A194BC4EEA445BA2483254186F0FB9E9561DB8",
+                nameca: "CA仮",
+                CA: [
                     {
-                        "publickey": "030FB3C4DA03E4E495C56368E3C55F7846A295E1C6DA14954F8379C82586135B08",
-                        "caname": "",
-                        "signature": "4C068212AD1D563ED4E6C1B9A06AE1351F47E480047BDF8502A51D277F3F94ADB5774F8D3623F1545871ABF34CAC868648CA50194216021F00FA634FEEA23BAC",
-                        "end": true,
-                        "domain": [
+                        publickey: "030FB3C4DA03E4E495C56368E3C55F7846A295E1C6DA14954F8379C82586135B08",
+                        caname: "",
+                        signature: "4C068212AD1D563ED4E6C1B9A06AE1351F47E480047BDF8502A51D277F3F94ADB5774F8D3623F1545871ABF34CAC868648CA50194216021F00FA634FEEA23BAC",
+                        end: true,
+                        domain: [
                             {
-                                "domainname": "example.com",
-                                "pubkey": "030FB3C4DA03E4E495C56368E3C55F7846A295E1C6DA14954F8379C82586135B08",
-                                "signday": "2026-02-28"
-                            }
-                        ]
-                    }
-                ]
-            }
-        ]
+                                domainname: "example.com",
+                                pubkey: "030FB3C4DA03E4E495C56368E3C55F7846A295E1C6DA14954F8379C82586135B08",
+                                signday: "2026-02-28",
+                            },
+                        ],
+                    },
+                ],
+            },
+        ],
     };
     console.log("ドメイン検証 (example.com):", verifyDomain(certDomain, "example.com"), "← trueが正解");
     console.log("ドメイン検証 (other.com):", verifyDomain(certDomain, "other.com"), "← falseが正解");

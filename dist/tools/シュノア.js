@@ -94,12 +94,18 @@ class syunoa {
     sign(message, x) {
         const k = this.sha256(new Uint8Array([...message, ...this.BigintToBytes(x)])).reduce((acc, b) => (acc << 8n) | BigInt(b), 0n) % this.q;
         const r = this.modPow(this.g, k, this.p);
-        const e = BigInt('0x' + Array.from(this.sha256(new Uint8Array([...message, ...this.BigintToBytes(r)]))).map(b => b.toString(16).padStart(2, '0')).join('')) % this.q;
+        const e = BigInt("0x" +
+            Array.from(this.sha256(new Uint8Array([...message, ...this.BigintToBytes(r)])))
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join("")) % this.q;
         const s = (k + e * x) % this.q;
         return { r, s };
     }
     BigintToBytes(n, byteLength = 32) {
-        const hex = n.toString(16).toUpperCase().padStart(byteLength * 2, "0");
+        const hex = n
+            .toString(16)
+            .toUpperCase()
+            .padStart(byteLength * 2, "0");
         const bytes = new Uint8Array(byteLength);
         for (let i = 0; i < byteLength; i++) {
             bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
@@ -109,7 +115,10 @@ class syunoa {
     verify(message, r, s, y) {
         if (r <= 0n || r >= this.p || s <= 0n || s >= this.q)
             return false;
-        const e = BigInt('0x' + Array.from(this.sha256(new Uint8Array([...message, ...this.BigintToBytes(r)]))).map(b => b.toString(16).padStart(2, '0')).join('')) % this.q;
+        const e = BigInt("0x" +
+            Array.from(this.sha256(new Uint8Array([...message, ...this.BigintToBytes(r)])))
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join("")) % this.q;
         const gpows = this.modPow(this.g, s, this.p);
         const ypowe = this.modPow(y, e, this.p);
         return gpows === (r * ypowe) % this.p;
@@ -122,6 +131,9 @@ const message = new TextEncoder().encode("Hello, world!");
 const signature = syunoaInstance.sign(message, privkey);
 const isValid = syunoaInstance.verify(message, signature.r, signature.s, key);
 console.log("Public Key:", key.toString(16));
-console.log("Signature:", { r: signature.r.toString(16), s: signature.s.toString(16) });
+console.log("Signature:", {
+    r: signature.r.toString(16),
+    s: signature.s.toString(16),
+});
 console.log("Signature valid:", isValid);
 export {};

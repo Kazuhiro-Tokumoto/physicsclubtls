@@ -28,7 +28,7 @@ export function issueIntermediateCA(
   country: string,
   state: string,
   city: string,
-  text: string = ""
+  text: string = "",
 ): { entry: DYLAEntry; keyPair: { privateKey: string; publicKey: string } } {
   const keyPair = DYLA.generateKeyPair();
 
@@ -39,10 +39,16 @@ export function issueIntermediateCA(
     Country: country,
     State: state,
     City: city,
-    IssuedAt: nowISO()
+    IssuedAt: nowISO(),
   };
 
-  const entry = DYLA.createEntry(parentCAName, order, domain, parentPrivateKey, text);
+  const entry = DYLA.createEntry(
+    parentCAName,
+    order,
+    domain,
+    parentPrivateKey,
+    text,
+  );
   return { entry, keyPair };
 }
 
@@ -58,7 +64,7 @@ export function issueEndEntity(
   country: string,
   state: string,
   city: string,
-  text: string = ""
+  text: string = "",
 ): { cert: DYLA; keyPair: { privateKey: string; publicKey: string } } {
   const keyPair = DYLA.generateKeyPair();
   const order = chainEntries.length;
@@ -70,10 +76,16 @@ export function issueEndEntity(
     Country: country,
     State: state,
     City: city,
-    IssuedAt: nowISO()
+    IssuedAt: nowISO(),
   };
 
-  const entry = DYLA.createEntry(parentCAName, order, domain, parentPrivateKey, text);
+  const entry = DYLA.createEntry(
+    parentCAName,
+    order,
+    domain,
+    parentPrivateKey,
+    text,
+  );
   const cert = new DYLA({ DYLA: [...chainEntries, entry] });
   return { cert, keyPair };
 }
@@ -89,8 +101,12 @@ export function issueSubCA(
   country: string,
   state: string,
   city: string,
-  text: string = ""
-): { entry: DYLAEntry; keyPair: { privateKey: string; publicKey: string }; chain: DYLAEntry[] } {
+  text: string = "",
+): {
+  entry: DYLAEntry;
+  keyPair: { privateKey: string; publicKey: string };
+  chain: DYLAEntry[];
+} {
   const order = chainEntries.length;
   const result = issueIntermediateCA(
     parentEntry.Domain.CN,
@@ -100,12 +116,12 @@ export function issueSubCA(
     country,
     state,
     city,
-    text
+    text,
   );
   return {
     entry: result.entry,
     keyPair: result.keyPair,
-    chain: [...chainEntries, result.entry]
+    chain: [...chainEntries, result.entry],
   };
 }
 
@@ -117,7 +133,7 @@ export function issueRootCA(
   country: string,
   state: string,
   city: string,
-  text: string = ""
+  text: string = "",
 ): { cert: DYLA; keyPair: { privateKey: string; publicKey: string } } {
   const keyPair = DYLA.generateKeyPair();
 
@@ -128,11 +144,18 @@ export function issueRootCA(
     Country: country,
     State: state,
     City: city,
-    IssuedAt: nowISO()
+    IssuedAt: nowISO(),
   };
 
   // 自己署名: 自分の秘密鍵で署名し、SelfSigned: true を付与
-  const entry = DYLA.createEntry(caName, 0, domain, keyPair.privateKey, text, true);
+  const entry = DYLA.createEntry(
+    caName,
+    0,
+    domain,
+    keyPair.privateKey,
+    text,
+    true,
+  );
   const cert = new DYLA({ DYLA: [entry] });
   return { cert, keyPair };
 }
@@ -148,12 +171,13 @@ export function issueFromPEM(
   country: string,
   state: string,
   city: string,
-  text: string = ""
+  text: string = "",
 ): { cert: DYLA; keyPair: { privateKey: string; publicKey: string } } {
   const existing = DYLA.fromPEM(pem);
   const lastEntry = existing.endEntity;
   if (!lastEntry) throw new Error("Empty certificate chain");
-  if (!lastEntry.Domain.IsCA) throw new Error("Last entry is not a CA, cannot issue from it");
+  if (!lastEntry.Domain.IsCA)
+    throw new Error("Last entry is not a CA, cannot issue from it");
 
   const keyPair = DYLA.generateKeyPair();
   const order = existing.chainLength;
@@ -165,10 +189,16 @@ export function issueFromPEM(
     Country: country,
     State: state,
     City: city,
-    IssuedAt: nowISO()
+    IssuedAt: nowISO(),
   };
 
-  const entry = DYLA.createEntry(lastEntry.Domain.CN, order, domain, caPrivateKey, text);
+  const entry = DYLA.createEntry(
+    lastEntry.Domain.CN,
+    order,
+    domain,
+    caPrivateKey,
+    text,
+  );
   const cert = new DYLA({ DYLA: [...existing.entries, entry] });
   return { cert, keyPair };
 }

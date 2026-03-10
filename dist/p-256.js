@@ -394,7 +394,8 @@ export class p_256 {
         if (peerPublicKeyHex.length === 66) {
             uncompressed = this.decompressPublicKey(peerPublicKeyHex);
         }
-        else if (peerPublicKeyHex.length === 130 && peerPublicKeyHex.startsWith("04")) {
+        else if (peerPublicKeyHex.length === 130 &&
+            peerPublicKeyHex.startsWith("04")) {
             uncompressed = peerPublicKeyHex.slice(2);
         }
         else {

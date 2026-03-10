@@ -11,7 +11,7 @@ function canonicalJSON(obj: unknown): string {
   const record = obj as Record<string, unknown>;
   const keys: string[] = Object.keys(record).sort();
   const pairs: string[] = keys.map(
-    (k) => `${JSON.stringify(k)}:${canonicalJSON(record[k])}`
+    (k) => `${JSON.stringify(k)}:${canonicalJSON(record[k])}`,
   );
   return "{" + pairs.join(",") + "}";
 }
@@ -52,7 +52,11 @@ const rootkeys: string[] = [
 
 function verifyCAChain(cas: CAEntry[], parentPubkey: string): boolean {
   for (const ca of cas) {
-    const valid = p256.verify(encoder.encode(ca.publickey), ca.signature, parentPubkey);
+    const valid = p256.verify(
+      encoder.encode(ca.publickey),
+      ca.signature,
+      parentPubkey,
+    );
     if (!valid) return false;
 
     if (ca.end || ca.domain) continue;
@@ -64,13 +68,20 @@ function verifyCAChain(cas: CAEntry[], parentPubkey: string): boolean {
   return true;
 }
 
-export function verifyCertificate(cert: Certificate, targetDomain?: string): boolean {
+export function verifyCertificate(
+  cert: Certificate,
+  targetDomain?: string,
+): boolean {
   for (const root of cert.root) {
     const rootPubkey = rootkeys[root.keynumber];
     if (!rootPubkey) return false;
 
     for (const ca of root.CA) {
-      const valid = p256.verify(encoder.encode(ca.publickey), root.sign, rootPubkey);
+      const valid = p256.verify(
+        encoder.encode(ca.publickey),
+        root.sign,
+        rootPubkey,
+      );
       if (!valid) return false;
 
       if (ca.end || ca.domain) continue;
@@ -117,12 +128,14 @@ function listCAs(
   cas: CAEntry[],
   prefix: string = "",
   results: { path: number[]; ca: CAEntry }[] = [],
-  currentPath: number[] = []
+  currentPath: number[] = [],
 ): { path: number[]; ca: CAEntry }[] {
   cas.forEach((ca, i) => {
     const path = [...currentPath, i];
     const endMark = ca.end ? " [END]" : ca.domain ? " [DOMAIN]" : "";
-    console.log(`  [${results.length}] ${prefix}${ca.caname} (${ca.publickey.slice(0, 16)}...)${endMark}`);
+    console.log(
+      `  [${results.length}] ${prefix}${ca.caname} (${ca.publickey.slice(0, 16)}...)${endMark}`,
+    );
     results.push({ path, ca });
     if (ca.CA) listCAs(ca.CA, prefix + "  ", results, path);
   });
@@ -152,7 +165,7 @@ function buildNameChain(root: RootEntry, path: number[]): string[] {
     ca = ca.CA![path[i]];
     names.push(ca.caname);
   }
-  return names.filter(n => n !== "");
+  return names.filter((n) => n !== "");
 }
 
 async function createRoot() {
@@ -247,7 +260,7 @@ async function addToExisting() {
     const domainname = await question("ドメイン名: ");
 
     const parentCA = getCAByPath(root, selectedCA.path);
-    if (parentCA.domain?.some(d => d.domainname === domainname)) {
+    if (parentCA.domain?.some((d) => d.domainname === domainname)) {
       console.log(`❌ "${domainname}" はすでに登録されています`);
       rl.close();
       return;
@@ -257,7 +270,10 @@ async function addToExisting() {
     const signday = new Date().toISOString().slice(0, 10);
 
     const domain: DomainEntry = { domainname, pubkey, signday };
-    const signature = p256.sign(encoder.encode(canonicalJSON(domain)), privateKey);
+    const signature = p256.sign(
+      encoder.encode(canonicalJSON(domain)),
+      privateKey,
+    );
 
     if (!parentCA.domain) parentCA.domain = [];
     parentCA.domain.push(domain);

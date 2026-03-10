@@ -38,12 +38,12 @@ export class ecsh {
         if (Z2 === 0n)
             return P1;
         const p = this.P;
-        const Z1Z1 = Z1 * Z1 % p;
-        const Z2Z2 = Z2 * Z2 % p;
-        const U1 = X1 * Z2Z2 % p;
-        const U2 = X2 * Z1Z1 % p;
-        const S1 = Y1 * Z2 * Z2Z2 % p; // ★ mod×1
-        const S2 = Y2 * Z1 * Z1Z1 % p; // ★ mod×1
+        const Z1Z1 = (Z1 * Z1) % p;
+        const Z2Z2 = (Z2 * Z2) % p;
+        const U1 = (X1 * Z2Z2) % p;
+        const U2 = (X2 * Z1Z1) % p;
+        const S1 = (Y1 * Z2 * Z2Z2) % p; // ★ mod×1
+        const S2 = (Y2 * Z1 * Z1Z1) % p; // ★ mod×1
         const H = (U2 - U1 + p) % p;
         const R = (S2 - S1 + p) % p;
         if (H === 0n) {
@@ -51,12 +51,12 @@ export class ecsh {
                 return this.doubleJacobian(P1);
             return [0n, 1n, 0n];
         }
-        const HH = H * H % p;
-        const HHH = H * HH % p;
-        const U1HH = U1 * HH % p;
+        const HH = (H * H) % p;
+        const HHH = (H * HH) % p;
+        const U1HH = (U1 * HH) % p;
         const X3 = (R * R - HHH - 2n * U1HH + 4n * p) % p; // ★ mod×1
         const Y3 = (R * (U1HH - X3 + p) - S1 * HHH + 2n * p * p) % p; // ★ mod×1
-        const Z3 = H * Z1 * Z2 % p; // ★ mod×1
+        const Z3 = (H * Z1 * Z2) % p; // ★ mod×1
         return [X3, Y3, Z3];
     }
     // ─── ヤコビアン点2倍算 ───────────────────────────────────────────────────
@@ -66,23 +66,23 @@ export class ecsh {
         if (Z === 0n)
             return Pt;
         const p = this.P;
-        const YY = Y * Y % p;
-        const YYYY = YY * YY % p;
-        const ZZ = Z * Z % p;
-        const S = 4n * X * YY % p;
-        const M = 3n * ((X + ZZ) % p) * ((X - ZZ + p) % p) % p;
+        const YY = (Y * Y) % p;
+        const YYYY = (YY * YY) % p;
+        const ZZ = (Z * Z) % p;
+        const S = (4n * X * YY) % p;
+        const M = (3n * ((X + ZZ) % p) * ((X - ZZ + p) % p)) % p;
         const X3 = (M * M - 2n * S + 2n * p) % p;
         const Y3 = (M * ((S - X3 + p) % p) - 8n * YYYY + 8n * p) % p;
-        return [X3, Y3, 2n * Y * Z % p];
+        return [X3, Y3, (2n * Y * Z) % p];
     }
     // ─── アフィン変換 ────────────────────────────────────────────────────────
     toAffine(Pt) {
         if (Pt[2] === 0n)
             return [0n, 0n];
         const invZ = this.inv(Pt[2], this.P);
-        const invZ2 = invZ * invZ % this.P;
-        const invZ3 = invZ2 * invZ % this.P;
-        return [Pt[0] * invZ2 % this.P, Pt[1] * invZ3 % this.P];
+        const invZ2 = (invZ * invZ) % this.P;
+        const invZ3 = (invZ2 * invZ) % this.P;
+        return [(Pt[0] * invZ2) % this.P, (Pt[1] * invZ3) % this.P];
     }
     // ─── G倍算 (事前計算テーブル w=8) ───────────────────────────────────────
     scalarMultG(k) {
@@ -157,10 +157,10 @@ export class ecsh {
         if (x === 0n && y === 0n)
             return false;
         const p = this.P;
-        const x2 = x * x % p;
+        const x2 = (x * x) % p;
         // y² ≡ x³ - 3x + b  (a = p-3)
-        const rhs = (x2 * x % p - 3n * x % p + this.b + 2n * p) % p;
-        return y * y % p === rhs;
+        const rhs = (((x2 * x) % p) - ((3n * x) % p) + this.b + 2n * p) % p;
+        return (y * y) % p === rhs;
     }
     // ─── SHA-256 ─────────────────────────────────────────────────────────────
     sha256(data) {
@@ -299,20 +299,24 @@ export class ecsh {
         const priv = this.hexToBigInt(privateKey);
         const R = this.scalarMultG(k);
         const e = this.bytesToBigInt(this.sha256(this.concat(message, this.BigintToBytes(R[0])))) % this.N;
-        const s = ((k - e * priv) % this.N + this.N) % this.N;
+        const s = (((k - e * priv) % this.N) + this.N) % this.N;
         if (R[0] === 0n || s === 0n)
             throw new Error("署名値が0になりました。アルゴリズム要件により失敗とみなします。");
         return { R, s };
     }
     sign(message, privateKey) {
         const { R, s } = this.signtobigint(message, privateKey);
-        return this.bigintToHex(R[0]) + this.bigintToHex(R[1]) + this.bigintToHex(s);
+        return (this.bigintToHex(R[0]) + this.bigintToHex(R[1]) + this.bigintToHex(s));
     }
     // ─── 検証 ────────────────────────────────────────────────────────────────
     _prof = {};
     _profTmp = 0;
-    _profStart(_n) { this._profTmp = performance.now(); }
-    _profEnd(n) { this._prof[n] = (this._prof[n] ?? 0) + performance.now() - this._profTmp; }
+    _profStart(_n) {
+        this._profTmp = performance.now();
+    }
+    _profEnd(n) {
+        this._prof[n] = (this._prof[n] ?? 0) + performance.now() - this._profTmp;
+    }
     verify(message, signature, publicKey) {
         this._profStart("decompress_pubkey");
         const unc = publicKey.length === 66 ? this.decompressPublicKey(publicKey) : publicKey;
@@ -340,7 +344,10 @@ export class ecsh {
     generateKeyPair() {
         const priv = this.getRandomBigInt(this.N - 1n) + 1n;
         const pub = this.scalarMult(priv, this.G);
-        return { privateKey: this.bigintToHex(priv), publicKey: this.bigintToHex(pub[0]) + this.bigintToHex(pub[1]) };
+        return {
+            privateKey: this.bigintToHex(priv),
+            publicKey: this.bigintToHex(pub[0]) + this.bigintToHex(pub[1]),
+        };
     }
     privateKeyToPublicKey(hex) {
         const priv = this.hexToBigInt(hex);
@@ -354,7 +361,9 @@ export class ecsh {
         const priv = this.hexToBigInt(privateKeyHex);
         if (priv <= 0n || priv >= this.N)
             throw new Error("無効な秘密鍵");
-        const unc = peerPublicKeyHex.length === 66 ? this.decompressPublicKey(peerPublicKeyHex) : peerPublicKeyHex;
+        const unc = peerPublicKeyHex.length === 66
+            ? this.decompressPublicKey(peerPublicKeyHex)
+            : peerPublicKeyHex;
         const px = this.hexToBigInt(unc.slice(0, 64));
         const py = this.hexToBigInt(unc.slice(64, 128));
         if (!this.isPointOnCurve([px, py]))
@@ -372,10 +381,13 @@ export class ecsh {
         if (x1 === x2) {
             if (y1 !== y2 || y1 === 0n)
                 return [0n, 0n];
-            m = (3n * x1 * x1 % p - 3n * x1 % p + this.a + 2n * p) % p * this.inv(2n * y1 % p, p) % p;
+            m =
+                (((((3n * x1 * x1) % p) - ((3n * x1) % p) + this.a + 2n * p) % p) *
+                    this.inv((2n * y1) % p, p)) %
+                    p;
         }
         else {
-            m = (y2 - y1 + p) % p * this.inv((x2 - x1 + p) % p, p) % p;
+            m = (((y2 - y1 + p) % p) * this.inv((x2 - x1 + p) % p, p)) % p;
         }
         const x3 = (m * m - x1 - x2 + 2n * p) % p;
         return [x3, (m * (x1 - x3 + p) - y1 + p) % p];
@@ -384,11 +396,12 @@ export class ecsh {
     decompressPublicKey(compressed) {
         const x = this.hexToBigInt(compressed.slice(2, 66));
         const p = this.P;
-        const x2 = x * x % p;
-        const rhs = (x2 * x % p - 3n * x % p + this.b + 2n * p) % p;
+        const x2 = (x * x) % p;
+        const rhs = (((x2 * x) % p) - ((3n * x) % p) + this.b + 2n * p) % p;
         const y = this.modSqrt(rhs);
         const wantOdd = compressed.slice(0, 2) === "03";
-        return this.bigintToHex(x) + this.bigintToHex((y % 2n === 1n) === wantOdd ? y : p - y);
+        return (this.bigintToHex(x) +
+            this.bigintToHex((y % 2n === 1n) === wantOdd ? y : p - y));
     }
     inv(e, mod) {
         let r0 = mod, r1 = ((e % mod) + mod) % mod;
@@ -407,8 +420,8 @@ export class ecsh {
         base %= mod;
         while (exp > 0n) {
             if (exp & 1n)
-                r = r * base % mod;
-            base = base * base % mod;
+                r = (r * base) % mod;
+            base = (base * base) % mod;
             exp >>= 1n;
         }
         return r;
@@ -430,20 +443,24 @@ export class ecsh {
         while (true) {
             if (t === 1n)
                 return R;
-            let i = 1n, tmp = t * t % this.P;
+            let i = 1n, tmp = (t * t) % this.P;
             while (tmp !== 1n) {
-                tmp = tmp * tmp % this.P;
+                tmp = (tmp * tmp) % this.P;
                 i++;
             }
             const b = this.modPow(c, 2n ** (M - i - 1n), this.P);
             M = i;
-            c = b * b % this.P;
-            t = t * b * b % this.P;
-            R = R * b % this.P;
+            c = (b * b) % this.P;
+            t = (t * b * b) % this.P;
+            R = (R * b) % this.P;
         }
     }
-    bigintToHex(n) { return n.toString(16).toUpperCase().padStart(64, "0"); }
-    hexToBigInt(hex) { return BigInt("0x" + hex); }
+    bigintToHex(n) {
+        return n.toString(16).toUpperCase().padStart(64, "0");
+    }
+    hexToBigInt(hex) {
+        return BigInt("0x" + hex);
+    }
     BigintToBytes(n) {
         const hex = n.toString(16).toUpperCase().padStart(64, "0");
         const b = new Uint8Array(32);
@@ -514,7 +531,8 @@ export class ecsh {
     document.head.appendChild(style);
     const link = document.createElement("link");
     link.rel = "stylesheet";
-    link.href = "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap";
+    link.href =
+        "https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500&family=DM+Sans:wght@300;400;500&display=swap";
     document.head.appendChild(link);
     // ── ヘルパー ──
     const el = (tag, cls = "", text = "") => {
@@ -544,7 +562,7 @@ export class ecsh {
                 return;
             navigator.clipboard.writeText(out.textContent ?? "").then(() => {
                 copy.textContent = "copied";
-                setTimeout(() => copy.textContent = "copy", 1200);
+                setTimeout(() => (copy.textContent = "copy"), 1200);
             });
         });
         wrap.appendChild(out);
@@ -596,14 +614,14 @@ export class ecsh {
         panelEls.push(panel);
         build(panel);
         tab.addEventListener("click", () => {
-            tabs.forEach(t => t.classList.remove("active"));
-            panelEls.forEach(p => p.classList.remove("active"));
+            tabs.forEach((t) => t.classList.remove("active"));
+            panelEls.forEach((p) => p.classList.remove("active"));
             tab.classList.add("active");
             panel.classList.add("active");
         });
     };
     // ── keygen ──
-    addTab("keygen", p => {
+    addTab("keygen", (p) => {
         const privOut = addOutput(p, "private key (hex)");
         const pubOut = addOutput(p, "public key (hex)");
         addBtn(p, "鍵を生成する", () => {
@@ -613,7 +631,7 @@ export class ecsh {
         });
     });
     // ── priv→pub ──
-    addTab("priv→pub", p => {
+    addTab("priv→pub", (p) => {
         const privIn = mkInput("秘密鍵のhex (64文字)");
         addField(p, "private key (hex)", privIn);
         const out = addOutput(p, "public key (hex)");
@@ -628,7 +646,7 @@ export class ecsh {
         });
     });
     // ── sign ──
-    addTab("sign", p => {
+    addTab("sign", (p) => {
         const ta = mkTextarea("署名するメッセージ");
         addField(p, "message", ta);
         const privIn = mkInput("秘密鍵のhex (64文字)");
@@ -645,7 +663,7 @@ export class ecsh {
         });
     });
     // ── verify ──
-    addTab("verify", p => {
+    addTab("verify", (p) => {
         const ta = mkTextarea("検証するメッセージ");
         addField(p, "message", ta);
         const sigIn = mkInput("署名のhex");
@@ -671,7 +689,7 @@ export class ecsh {
         p.appendChild(f);
     });
     // ── dh ──
-    addTab("dh", p => {
+    addTab("dh", (p) => {
         const privIn = mkInput("自分の秘密鍵 (hex)");
         addField(p, "private key (hex)", privIn);
         const pubIn = mkInput("相手の公開鍵 (hex)");

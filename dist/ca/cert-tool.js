@@ -112,7 +112,7 @@ function buildNameChain(root, path) {
         ca = ca.CA[path[i]];
         names.push(ca.caname);
     }
-    return names.filter(n => n !== "");
+    return names.filter((n) => n !== "");
 }
 async function createRoot() {
     console.log("\n=== Root証明書の作成 ===");
@@ -192,7 +192,7 @@ async function addToExisting() {
     else if (addType === "2") {
         const domainname = await question("ドメイン名: ");
         const parentCA = getCAByPath(root, selectedCA.path);
-        if (parentCA.domain?.some(d => d.domainname === domainname)) {
+        if (parentCA.domain?.some((d) => d.domainname === domainname)) {
             console.log(`❌ "${domainname}" はすでに登録されています`);
             rl.close();
             return;

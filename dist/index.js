@@ -73,11 +73,29 @@ function renderStep0(app) {
       </div>
     </div>
   `;
-    $("btn-new").onclick = () => { state.mode = "new"; state.step = 1; render(); };
-    $("btn-import").onclick = () => { state.mode = "import"; state.step = 1; render(); };
-    $("btn-viewer").onclick = () => { state.mode = "viewer"; state.step = 10; render(); };
-    $("btn-selfcheck").onclick = () => { state.step = 11; render(); };
-    $("btn-verify").onclick = () => { state.step = 12; render(); };
+    $("btn-new").onclick = () => {
+        state.mode = "new";
+        state.step = 1;
+        render();
+    };
+    $("btn-import").onclick = () => {
+        state.mode = "import";
+        state.step = 1;
+        render();
+    };
+    $("btn-viewer").onclick = () => {
+        state.mode = "viewer";
+        state.step = 10;
+        render();
+    };
+    $("btn-selfcheck").onclick = () => {
+        state.step = 11;
+        render();
+    };
+    $("btn-verify").onclick = () => {
+        state.step = 12;
+        render();
+    };
 }
 // ===== renderSelfCheck 新規追加 =====
 function renderSelfCheck(app) {
@@ -101,7 +119,10 @@ function renderSelfCheck(app) {
       <div id="self-result"></div>
     </div>
   `;
-    $("btn-back").onclick = () => { state.step = 0; render(); };
+    $("btn-back").onclick = () => {
+        state.step = 0;
+        render();
+    };
     $("btn-check").onclick = () => {
         const pem = $("self-pem").value.trim();
         if (!pem) {
@@ -121,7 +142,9 @@ function renderSelfCheck(app) {
           <div class="field"><span class="label">最終CN:</span> ${cert.cn}</div>`;
                 if (domain) {
                     const last = cert.endEntity;
-                    const matched = last ? DYLA.matchDomain(last.Domain.CN, domain) : false;
+                    const matched = last
+                        ? DYLA.matchDomain(last.Domain.CN, domain)
+                        : false;
                     html += `<div class="field"><span class="label">ドメインマッチ:</span> 
             <span class="${matched ? "status-ok" : "status-ng"}">${matched ? "✅ " + domain + " → " + last?.Domain.CN : "❌ " + domain + " ≠ " + last?.Domain.CN}</span>
           </div>`;
@@ -163,7 +186,10 @@ function renderVerify(app) {
       <div id="verify-result"></div>
     </div>
   `;
-    $("btn-back").onclick = () => { state.step = 0; render(); };
+    $("btn-back").onclick = () => {
+        state.step = 0;
+        render();
+    };
     $("btn-verify-go").onclick = () => {
         const pem = $("verify-pem").value.trim();
         if (!pem) {
@@ -184,7 +210,9 @@ function renderVerify(app) {
           <div class="field"><span class="label">ルートCA:</span> ${cert.entries[0]?.CA}</div>`;
                 if (domain) {
                     const last = cert.endEntity;
-                    const matched = last ? DYLA.matchDomain(last.Domain.CN, domain) : false;
+                    const matched = last
+                        ? DYLA.matchDomain(last.Domain.CN, domain)
+                        : false;
                     html += `<div class="field"><span class="label">ドメインマッチ:</span> 
             <span class="${matched ? "status-ok" : "status-ng"}">${matched ? "✅ " + domain + " → " + last?.Domain.CN : "❌ " + domain + " ≠ " + last?.Domain.CN}</span>
           </div>`;
@@ -223,7 +251,10 @@ function renderViewer(app) {
       <div id="viewer-result"></div>
     </div>
   `;
-    $("btn-back").onclick = () => { state.step = 0; render(); };
+    $("btn-back").onclick = () => {
+        state.step = 0;
+        render();
+    };
     $("btn-parse").onclick = () => {
         const pem = $("viewer-pem").value.trim();
         if (!pem) {
@@ -246,7 +277,10 @@ function renderViewer(app) {
                 const serialValid = DYLA.verifySerial(entry);
                 const validityDays = entry.Domain.IsCA ? "5年" : "90日";
                 const issuedAt = new Date(entry.Domain.IssuedAt);
-                const expiresAt = new Date(issuedAt.getTime() + (entry.Domain.IsCA ? 5 * 365.25 * 24 * 60 * 60 * 1000 : 90 * 24 * 60 * 60 * 1000));
+                const expiresAt = new Date(issuedAt.getTime() +
+                    (entry.Domain.IsCA
+                        ? 5 * 365.25 * 24 * 60 * 60 * 1000
+                        : 90 * 24 * 60 * 60 * 1000));
                 html += `
           <div class="viewer-entry">
             <div class="viewer-entry-header">
@@ -363,7 +397,10 @@ function renderStep1(app) {
         </div>
       </div>
     `;
-        $("btn-back").onclick = () => { state.step = 0; render(); };
+        $("btn-back").onclick = () => {
+            state.step = 0;
+            render();
+        };
         $("btn-gen").onclick = () => {
             const name = $("root-ca-name").value.trim();
             if (!name) {
@@ -375,13 +412,19 @@ function renderStep1(app) {
                 const privInput = $("root-privkey").value.trim();
                 if (privInput) {
                     const pub = ec.privateKeyToPublicKey(privInput);
-                    state.rootKeyPair = { privateKey: privInput, publicKey: pub.compressed };
+                    state.rootKeyPair = {
+                        privateKey: privInput,
+                        publicKey: pub.compressed,
+                    };
                 }
                 else {
                     const raw = DYLA.generateKeyPair();
                     // generateKeyPairは "04"+uncompressed を返すので、compressedも作る
                     const compressed = ec.compressPublicKey(raw.publicKey.slice(2));
-                    state.rootKeyPair = { privateKey: raw.privateKey, publicKey: compressed };
+                    state.rootKeyPair = {
+                        privateKey: raw.privateKey,
+                        publicKey: compressed,
+                    };
                 }
             }
             catch (e) {
@@ -427,7 +470,10 @@ function renderStep1(app) {
         </div>
       </div>
     `;
-        $("btn-back").onclick = () => { state.step = 0; render(); };
+        $("btn-back").onclick = () => {
+            state.step = 0;
+            render();
+        };
         $("btn-import-go").onclick = () => {
             const pem = $("pem-input").value.trim();
             const privKey = $("ca-privkey").value.trim();
@@ -510,12 +556,17 @@ function renderStep2(app) {
       </div>
     </div>
   `;
-    $("btn-back").onclick = () => { state.step = 1; render(); };
+    $("btn-back").onclick = () => {
+        state.step = 1;
+        render();
+    };
     $("btn-issue").onclick = () => {
         try {
             state.cn = $("cert-cn").value.trim();
             state.isCA = $("cert-isca").value === "true";
-            state.country = $("cert-country").value.trim().toUpperCase();
+            state.country = $("cert-country").value
+                .trim()
+                .toUpperCase();
             state.state_ = $("cert-state").value.trim();
             state.city = $("cert-city").value.trim();
             state.text = $("cert-text").value;
@@ -536,14 +587,16 @@ function renderStep2(app) {
             if (isSelfSignedRoot) {
                 // 自己署名ルートCA: 署名鍵(rootKeyPair)の公開鍵をエントリに入れる
                 // でないと署名した鍵とPubkeyが不一致になる
-                pubkeyUncompressed = "04" + ec.decompressPublicKey(state.rootKeyPair.publicKey);
+                pubkeyUncompressed =
+                    "04" + ec.decompressPublicKey(state.rootKeyPair.publicKey);
                 resultPrivateKey = state.rootKeyPair.privateKey;
             }
             else if (pubInput) {
                 if (pubInput.startsWith("04") && pubInput.length === 130) {
                     pubkeyUncompressed = pubInput;
                 }
-                else if ((pubInput.startsWith("02") || pubInput.startsWith("03")) && pubInput.length === 66) {
+                else if ((pubInput.startsWith("02") || pubInput.startsWith("03")) &&
+                    pubInput.length === 66) {
                     pubkeyUncompressed = "04" + ec.decompressPublicKey(pubInput);
                 }
                 else {
@@ -563,7 +616,7 @@ function renderStep2(app) {
                 Country: state.country,
                 State: state.state_,
                 City: state.city,
-                IssuedAt: nowISO()
+                IssuedAt: nowISO(),
             };
             const entry = DYLA.createEntry(state.currentSignerName, order, domain, state.currentSignerKey, state.text, state.mode === "new" && order === 0 ? state.selfSigned : false);
             const certEntries = [...state.chain, entry];
@@ -590,7 +643,8 @@ function renderStep2(app) {
 // ===== Step 3も差し替え（秘密鍵表示の条件分岐） =====
 function renderStep3(app) {
     const cert = DYLA.fromPEM(state.resultPEM);
-    const chainHTML = cert.entries.map((e, i) => `
+    const chainHTML = cert.entries
+        .map((e, i) => `
     <div class="chain-entry">
       <div class="chain-order">${e.Order}</div>
       <div class="chain-detail">
@@ -599,8 +653,10 @@ function renderStep3(app) {
         <div class="chain-meta">${e.Domain.Country} / ${e.Domain.State} / ${e.Domain.City} — 署名者: ${e.CA}</div>
       </div>
     </div>
-  `).join("");
-    const privKeyHTML = state.resultPrivateKey ? `
+  `)
+        .join("");
+    const privKeyHTML = state.resultPrivateKey
+        ? `
     <div class="form-group">
       <label>秘密鍵 (hex) — 自動生成</label>
       <div class="secret-box">
@@ -609,7 +665,8 @@ function renderStep3(app) {
       </div>
       <p class="warn">⚠ この秘密鍵は二度と表示されません。安全に保管してください。</p>
     </div>
-  ` : `
+  `
+        : `
     <p class="signer-info">秘密鍵: 公開鍵を手動入力したため表示なし</p>
   `;
     // 中間CAで続けて発行できるのは秘密鍵を知ってる場合のみ
@@ -638,9 +695,15 @@ function renderStep3(app) {
     if (state.resultPrivateKey) {
         $("btn-copy-priv").onclick = () => copyText(state.resultPrivateKey);
     }
-    $("btn-restart").onclick = () => { resetState(); render(); };
+    $("btn-restart").onclick = () => {
+        resetState();
+        render();
+    };
     if (canContinue && $("btn-continue")) {
-        $("btn-continue").onclick = () => { state.step = 2; render(); };
+        $("btn-continue").onclick = () => {
+            state.step = 2;
+            render();
+        };
     }
 }
 // ===== utilities =====

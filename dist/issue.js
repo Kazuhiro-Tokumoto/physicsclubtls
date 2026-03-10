@@ -23,7 +23,7 @@ export function issueIntermediateCA(parentCAName, parentPrivateKey, order, cn, c
         Country: country,
         State: state,
         City: city,
-        IssuedAt: nowISO()
+        IssuedAt: nowISO(),
     };
     const entry = DYLA.createEntry(parentCAName, order, domain, parentPrivateKey, text);
     return { entry, keyPair };
@@ -41,7 +41,7 @@ export function issueEndEntity(parentCAName, parentPrivateKey, chainEntries, cn,
         Country: country,
         State: state,
         City: city,
-        IssuedAt: nowISO()
+        IssuedAt: nowISO(),
     };
     const entry = DYLA.createEntry(parentCAName, order, domain, parentPrivateKey, text);
     const cert = new DYLA({ DYLA: [...chainEntries, entry] });
@@ -55,7 +55,7 @@ export function issueSubCA(parentEntry, parentPrivateKey, chainEntries, cn, coun
     return {
         entry: result.entry,
         keyPair: result.keyPair,
-        chain: [...chainEntries, result.entry]
+        chain: [...chainEntries, result.entry],
     };
 }
 // ===== 自己署名ルートCA作成 =====
@@ -68,7 +68,7 @@ export function issueRootCA(caName, cn, country, state, city, text = "") {
         Country: country,
         State: state,
         City: city,
-        IssuedAt: nowISO()
+        IssuedAt: nowISO(),
     };
     // 自己署名: 自分の秘密鍵で署名し、SelfSigned: true を付与
     const entry = DYLA.createEntry(caName, 0, domain, keyPair.privateKey, text, true);
@@ -93,7 +93,7 @@ export function issueFromPEM(pem, caPrivateKey, cn, isCA, country, state, city, 
         Country: country,
         State: state,
         City: city,
-        IssuedAt: nowISO()
+        IssuedAt: nowISO(),
     };
     const entry = DYLA.createEntry(lastEntry.Domain.CN, order, domain, caPrivateKey, text);
     const cert = new DYLA({ DYLA: [...existing.entries, entry] });

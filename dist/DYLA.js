@@ -20,13 +20,17 @@ export class DYLA {
         if (Array.isArray(obj))
             return "[" + obj.map(DYLA.canonicalJSON).join(",") + "]";
         const keys = Object.keys(obj).sort();
-        return "{" + keys.map(k => `${JSON.stringify(k)}:${DYLA.canonicalJSON(obj[k])}`).join(",") + "}";
+        return ("{" +
+            keys
+                .map((k) => `${JSON.stringify(k)}:${DYLA.canonicalJSON(obj[k])}`)
+                .join(",") +
+            "}");
     }
     // ===== PEMデコード → インスタンス =====
     static fromPEM(pem) {
         const lines = pem
             .split("\n")
-            .filter(line => !line.startsWith("-----"))
+            .filter((line) => !line.startsWith("-----"))
             .join("");
         const bytes = base64ToUint8(lines);
         const json = new TextDecoder().decode(bytes);
@@ -42,7 +46,7 @@ export class DYLA {
         return [
             "-----BEGIN DYLA CERTIFICATE-----",
             ...lines,
-            "-----END DYLA CERTIFICATE-----"
+            "-----END DYLA CERTIFICATE-----",
         ].join("\n");
     }
     // ===== バリデーション =====
@@ -57,8 +61,24 @@ export class DYLA {
             throw new Error("Invalid DYLA certificate: DYLA must be an array");
         if (o.DYLA.length === 0)
             throw new Error("Invalid DYLA certificate: DYLA array is empty");
-        const ENTRY_KEYS = ["CA", "Order", "Domain", "Sig", "Serial", "Text", "Message"];
-        const DOMAIN_KEYS = ["CN", "IsCA", "Pubkey", "Country", "State", "City", "IssuedAt"];
+        const ENTRY_KEYS = [
+            "CA",
+            "Order",
+            "Domain",
+            "Sig",
+            "Serial",
+            "Text",
+            "Message",
+        ];
+        const DOMAIN_KEYS = [
+            "CN",
+            "IsCA",
+            "Pubkey",
+            "Country",
+            "State",
+            "City",
+            "IssuedAt",
+        ];
         for (let i = 0; i < o.DYLA.length; i++) {
             const entry = o.DYLA[i];
             const prefix = `DYLA[${i}]`;
@@ -118,7 +138,9 @@ export class DYLA {
             valid: true,
             cn,
             matched,
-            error: matched ? undefined : `Domain mismatch: "${cn}" does not match "${domain}"`
+            error: matched
+                ? undefined
+                : `Domain mismatch: "${cn}" does not match "${domain}"`,
         };
     }
     // ===== Serial計算 (仕様 Section 6.2) =====
@@ -130,11 +152,13 @@ export class DYLA {
             Message: entry.Message,
             Order: entry.Order,
             Sig: entry.Sig,
-            Text: entry.Text
+            Text: entry.Text,
         };
         const data = new TextEncoder().encode(DYLA.canonicalJSON(obj));
         const hash = DYLA.ec.sha256(data);
-        return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2, "0")).join("");
+        return Array.from(new Uint8Array(hash))
+            .map((b) => b.toString(16).padStart(2, "0"))
+            .join("");
     }
     // ===== 署名生成 (仕様 Section 6.1) =====
     // Sig = ECDSA_P256_Sign(caPrivateKey, canonicalJSON(Domain))
@@ -147,7 +171,7 @@ export class DYLA {
         const data = new TextEncoder().encode(DYLA.canonicalJSON(entry.Domain));
         // 04+X+Y (130文字) → slice(2) で X+Y (128文字) に正規化して verify へ渡す
         // 圧縮鍵 (66文字) → そのまま渡す → verify 内で length===66 判定 → decompressPublicKey
-        const key = (caPubkey.length === 130 && caPubkey.startsWith("04"))
+        const key = caPubkey.length === 130 && caPubkey.startsWith("04")
             ? caPubkey.slice(2)
             : caPubkey;
         return DYLA.ec.verify(data, entry.Sig, key); // hashしない
@@ -178,7 +202,7 @@ export class DYLA {
             Sig: sig,
             Text: text,
             Message: "Do you like apple?",
-            ...(selfSigned ? { SelfSigned: true } : {})
+            ...(selfSigned ? { SelfSigned: true } : {}),
         };
         const serial = DYLA.computeSerial(partial);
         return { ...partial, Serial: serial };
@@ -197,9 +221,12 @@ export class DYLA {
         }
         else {
             // trust storeから取得
-            const rootTrust = trustStore.find(t => t.CA === root.CA);
+            const rootTrust = trustStore.find((t) => t.CA === root.CA);
             if (!rootTrust) {
-                return { valid: false, error: `Order 0: CA "${root.CA}" not found in trust store` };
+                return {
+                    valid: false,
+                    error: `Order 0: CA "${root.CA}" not found in trust store`,
+                };
             }
             rootPubkey = rootTrust.Pubkey;
         }
@@ -210,7 +237,10 @@ export class DYLA {
             }
             const signerPubkey = i === 0 ? rootPubkey : entries[i - 1].Domain.Pubkey;
             if (!DYLA.verifyEntry(entry, signerPubkey)) {
-                return { valid: false, error: `DYLA[${i}]: signature verification failed` };
+                return {
+                    valid: false,
+                    error: `DYLA[${i}]: signature verification failed`,
+                };
             }
             if (DYLA.isExpired(entry, now)) {
                 return { valid: false, error: `DYLA[${i}]: certificate expired` };
@@ -224,13 +254,19 @@ export class DYLA {
             }
             // 中間エントリ (最後以外) は IsCA: true でなければならない
             if (i < entries.length - 1 && !entry.Domain.IsCA) {
-                return { valid: false, error: `DYLA[${i}]: intermediate entry must be CA (IsCA: true)` };
+                return {
+                    valid: false,
+                    error: `DYLA[${i}]: intermediate entry must be CA (IsCA: true)`,
+                };
             }
         }
         if (expectedDomain) {
             const lastCN = entries[entries.length - 1].Domain.CN;
             if (!DYLA.matchDomain(lastCN, expectedDomain)) {
-                return { valid: false, error: `Domain mismatch: ${lastCN} vs ${expectedDomain}` };
+                return {
+                    valid: false,
+                    error: `Domain mismatch: ${lastCN} vs ${expectedDomain}`,
+                };
             }
         }
         if (root.SelfSigned === true) {
@@ -255,7 +291,7 @@ export class DYLA {
     // ===== CRL検証 =====
     static verifyCRL(crl, rootPubkey) {
         const data = new TextEncoder().encode(DYLA.canonicalJSON(crl.DYLA_CRL));
-        const key = (rootPubkey.length === 130 && rootPubkey.startsWith("04"))
+        const key = rootPubkey.length === 130 && rootPubkey.startsWith("04")
             ? rootPubkey.slice(2)
             : rootPubkey;
         return DYLA.ec.verify(data, crl.Sig, key);
@@ -265,7 +301,7 @@ export class DYLA {
         const crlData = {
             RevokedSerials: revokedSerials,
             IssuedAt: new Date().toISOString().replace(/\.\d{3}Z$/, "Z"),
-            Message: "Do you like apple?"
+            Message: "Do you like apple?",
         };
         const data = new TextEncoder().encode(DYLA.canonicalJSON(crlData));
         const sig = DYLA.ec.sign(data, rootPrivateKey); // hashを削除、dataを直接渡す
@@ -288,7 +324,7 @@ export class DYLA {
         return this.cert;
     }
     getEntry(order) {
-        return this.cert.DYLA.find(e => e.Order === order);
+        return this.cert.DYLA.find((e) => e.Order === order);
     }
     get endEntity() {
         return this.cert.DYLA[this.cert.DYLA.length - 1];
