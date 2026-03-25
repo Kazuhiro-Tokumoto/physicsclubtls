@@ -322,12 +322,16 @@ export class DYLA {
     if (entries.length === 0) {
       return { valid: false, error: "Empty certificate chain" };
     }
-
+    let self = false;
     const root = entries[0];
     let rootPubkey: string;
 
     if (root.SelfSigned === true) {
       // 自己署名: エントリ自身のPubkeyで検証
+      console.warn(
+        "Warning: root CA is self-signed. Make sure you trust this certificate.",
+      );
+      self = true;
       rootPubkey = root.Domain.Pubkey;
     } else {
       // trust storeから取得
@@ -392,6 +396,9 @@ export class DYLA {
       console.warn(
         "Warning: using self-signed root CA. Make sure you trust this certificate.",
       );
+    }
+    if (self === true) {
+      return { valid: true , error: "Chain is valid but uses self-signed root CA" };
     }
     return { valid: true };
   }
