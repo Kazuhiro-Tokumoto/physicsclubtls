@@ -276,7 +276,7 @@ export class DYLA {
             console.warn("Warning: using self-signed root CA. Make sure you trust this certificate.");
         }
         if (self === true) {
-            return { valid: true, error: "Chain is valid but uses self-signed root CA" };
+            return { valid: true, error: "TPN" };
         }
         return { valid: true };
     }

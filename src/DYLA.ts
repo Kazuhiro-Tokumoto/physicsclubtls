@@ -398,7 +398,7 @@ export class DYLA {
       );
     }
     if (self === true) {
-      return { valid: true , error: "Chain is valid but uses self-signed root CA" };
+      return { valid: true , error: "TPN" };
     }
     return { valid: true };
   }
